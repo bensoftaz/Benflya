@@ -1,24 +1,411 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Benson & Precious — Wedding Check-In</title>
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-<style>
-body{margin:0;background:#2c0a15;color:#fbf4ea;font-family:Arial,sans-serif;min-height:100vh}.wrap{max-width:680px;margin:auto;padding:24px}.card{background:#fff;color:#2b2119;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 16px 40px #0005}.brand{text-align:center;color:#d9a679}.hidden{display:none!important}input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:10px;margin:7px 0;font-size:16px}input{border:1px solid #ccc}button{border:0;background:#55162a;color:white;font-weight:700}.result{text-align:center;padding:24px;border-radius:18px}.green{background:#e8f7ec}.yellow{background:#fff5d9}.red{background:#fde8e8}.badge{width:100px;height:100px;border-radius:50%;display:grid;place-items:center;margin:0 auto 18px;font-size:52px;background:white}.green .badge{color:#16803b}.yellow .badge{color:#a56a00}.red .badge{color:#b42318}.big{font-size:28px;font-weight:800;margin:8px 0}.small{color:#666}.stats{text-align:center;font-weight:700;color:#55162a}#reader{width:100%}.manual{margin-top:16px}.logout{background:#777}.danger{color:#b42318}.ok{color:#16803b}
-</style></head><body><div class="wrap"><div class="brand"><h1>B &amp; P</h1><p>Wedding Check-In</p></div>
-<div id="login" class="card"><h2>Usher / Admin Login</h2><p>Authorized staff only.</p><input id="user" autocomplete="username" placeholder="Username"><input id="pass" type="password" autocomplete="current-password" placeholder="Password"><button id="loginBtn">Sign in</button><p id="loginMsg"></p></div>
-<div id="app" class="hidden"><div class="card"><div class="stats" id="stats">Checked in: — / — expected</div><button id="start">Start Camera Scanner</button><div id="reader" class="hidden"></div><div class="manual"><input id="manualId" placeholder="BP-XXXXXX"><button id="manualBtn">Check In Guest ID</button></div><button id="logout" class="logout">Log out</button></div><div id="result" class="card hidden"></div></div></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Check-In — Benson & Precious</title>
+
 <script>
-const API_URL='https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec'; // Google Apps Script Web App URL
-let token=localStorage.getItem('bp_checkin_token')||'', scanner=null;
-const $=id=>document.getElementById(id);
-function showApp(){ $('login').classList.add('hidden'); $('app').classList.remove('hidden'); refreshStats(); }
-if(token) showApp();
-$('loginBtn').onclick=async()=>{try{const r=await post({action:'login',username:$('user').value,password:$('pass').value});if(r.status==='success'){token=r.token;localStorage.setItem('bp_checkin_token',token);showApp();}else $('loginMsg').textContent=r.message;}catch(e){$('loginMsg').textContent='Could not connect to the check-in server.';}};
-$('logout').onclick=()=>{token='';localStorage.removeItem('bp_checkin_token');location.reload();};
-async function post(body){if(!API_URL) throw new Error('API_URL not configured');const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});return r.json();}
-async function check(id){id=(id||'').trim().toUpperCase();if(!id)return;try{const r=await post({action:'checkin',guestId:id,token});if(r.status==='error'&&/Unauthorized/i.test(r.message||'')){localStorage.removeItem('bp_checkin_token');location.reload();return;}render(r);}catch(e){render({status:'not_found',message:'Connection error — check your internet connection.'});}}
-function render(r){const el=$('result');el.className='card';let cls='red',icon='✕',title='No matching guest',detail=r.message||'Guest ID not found.';if(r.status==='checked_in'){cls='green';icon='✓';title=r.name;detail='Attending · '+r.partySize+' guest'+(r.partySize===1?'':'s')+(r.dietary?' · '+r.dietary:'');}else if(r.status==='already_checked_in'){cls='yellow';icon='✓';title=r.name;detail='Already checked in at '+new Date(r.checkedAt).toLocaleTimeString();}else if(r.status==='not_attending'){cls='red';icon='✕';title=r.name||'Guest';detail='This guest RSVP was recorded as not attending.';}el.innerHTML='<div class="result '+cls+'"><div class="badge">'+icon+'</div><div class="big">'+title+'</div><div>'+detail+'</div><div class="small">'+(r.guestId||'')+'</div></div>';refreshStats();}
-$('manualBtn').onclick=()=>check($('manualId').value);$('manualId').addEventListener('keydown',e=>{if(e.key==='Enter')check($('manualId').value)});
-$('start').onclick=async()=>{if(!API_URL){alert('Set API_URL in checkin.html first.');return;}$('reader').classList.remove('hidden');if(scanner)return;scanner=new Html5Qrcode('reader');try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},text=>{scanner.pause(true);check(text);setTimeout(()=>{try{scanner.resume();}catch(e){}},1600);},()=>{});}catch(e){alert('Camera could not start. Use the manual guest ID field instead.');}};
-async function refreshStats(){if(!token)return;try{const r=await fetch(API_URL+'?action=stats&token='+encodeURIComponent(token));const j=await r.json();if(j.status==='success')$('stats').textContent='Checked in: '+j.checkedIn+' / '+j.expected+' expected';}catch(e){}}
-setInterval(refreshStats,15000);
-</script></body></html>
+  // Same Apps Script Web App URL used by the main site.
+  const API_URL = "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
+
+  // Soft access gate — NOT real security (visible to anyone who views page
+  // source). Fine for keeping ushers/admin on the right screen at the venue.
+  const CREDENTIALS = {
+    "EventsC01": { password: "Bernadette", role: "scanner", label: "Usher C01" },
+    "EventsC02": { password: "Memory",     role: "scanner", label: "Usher C02" },
+    "Admin":     { password: "Admin",      role: "admin",   label: "Admin" }
+  };
+</script>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+  :root{
+    --burgundy-950:#2c0a15; --burgundy-800:#5c1229;
+    --rose-400:#d7a3b3; --gold-500:#c9a24b;
+    --cream:#fdf9f6; --ink:#220812;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:system-ui,-apple-system,sans-serif;
+    background:var(--burgundy-950); color:var(--cream);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:20px;
+  }
+  h1{font-size:1.3rem; font-weight:600; margin-bottom:4px; text-align:center;}
+  .sub{color:var(--rose-400); font-size:0.85rem; margin-bottom:20px; text-align:center;}
+
+  .card{
+    width:100%; max-width:420px; background:var(--cream); color:var(--ink);
+    border-radius:10px; padding:26px; margin-bottom:16px;
+  }
+  .card h2{font-size:1.1rem; margin-bottom:14px; color:var(--burgundy-800);}
+  label{display:block; font-size:0.8rem; font-weight:600; margin:14px 0 6px; color:#5c1229;}
+  input[type=text], input[type=password]{
+    width:100%; padding:12px 14px; border-radius:6px; border:1px solid #ddd; font-size:1rem;
+  }
+  .btn{
+    width:100%; padding:13px; border-radius:6px; border:none; font-weight:700;
+    cursor:pointer; font-size:0.95rem; margin-top:16px;
+  }
+  .btn-primary{background:var(--burgundy-800); color:#fff;}
+  .btn-secondary{background:#999; color:#fff;}
+  .btn-ghost{background:transparent; border:1px solid var(--gold-500); color:var(--gold-500);}
+  .error-msg{color:#b02a2a; font-size:0.85rem; margin-top:10px; display:none;}
+
+  .topbar{
+    width:100%; max-width:640px; display:flex; justify-content:space-between;
+    align-items:center; margin-bottom:16px; font-size:0.85rem; color:var(--rose-400);
+  }
+  .topbar .who{font-weight:600; color:var(--cream);}
+  .topbar button{
+    background:none; border:1px solid var(--rose-400); color:var(--rose-400);
+    padding:6px 14px; border-radius:6px; font-size:0.8rem; cursor:pointer;
+  }
+
+  #reader{width:100%; max-width:420px; border-radius:8px; overflow:hidden; border:2px solid var(--gold-500);}
+  .manual{width:100%; max-width:420px; margin-top:18px; display:flex; gap:8px;}
+  .manual input{flex:1; text-transform:uppercase;}
+  .manual button{padding:12px 20px; border-radius:6px; border:none; background:var(--gold-500); color:var(--burgundy-950); font-weight:600; cursor:pointer;}
+
+  #result{
+    width:100%; max-width:420px; margin-top:20px; padding:28px 22px;
+    border-radius:8px; text-align:center; display:none; animation:pop .25s ease;
+  }
+  @keyframes pop{ from{transform:scale(.94); opacity:0;} to{transform:scale(1); opacity:1;} }
+  #result.ok{background:#1f4d2e; border:2px solid #4caf50;}
+  #result.warn{background:#5c4a12; border:2px solid #d4a017;}
+  #result.err{background:#5c1616; border:2px solid #d43f3f;}
+  .badge{width:72px; height:72px; border-radius:50%; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; font-size:2.2rem; font-weight:700;}
+  .badge.tick{background:#4caf50; color:#0d2612;}
+  .badge.cross{background:#d43f3f; color:#3a0808;}
+  .badge.warnbadge{background:#d4a017; color:#3a2c04;}
+  #result .guestName{font-size:1.7rem; font-weight:700; margin-bottom:6px;}
+  #result .status-line{font-size:0.85rem; letter-spacing:1px; text-transform:uppercase; opacity:0.85; margin-bottom:10px;}
+  #result p.detail{font-size:0.95rem; opacity:0.9; margin-top:4px;}
+
+  #counter{margin-top:24px; font-size:0.85rem; color:var(--rose-400); text-align:center;}
+  #counter b{color:var(--cream); font-size:1.1rem;}
+
+  /* Admin dashboard */
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; width:100%; max-width:640px; margin-bottom:16px;}
+  .stat-box{background:var(--cream); color:var(--burgundy-800); border-radius:8px; padding:16px 8px; text-align:center;}
+  .stat-box .n{font-size:1.6rem; font-weight:800;}
+  .stat-box .l{font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:#7a1f3a;}
+
+  .admin-panel{width:100%; max-width:640px; background:var(--cream); color:var(--ink); border-radius:10px; padding:18px; margin-bottom:16px;}
+  .admin-panel h2{color:var(--burgundy-800); font-size:1.05rem; margin-bottom:12px;}
+  .search-row{display:flex; gap:8px; margin-bottom:12px;}
+  .search-row input{flex:1;}
+  .search-row button{padding:0 16px; border-radius:6px; border:none; background:var(--burgundy-800); color:#fff; font-weight:600; cursor:pointer;}
+
+  table{width:100%; border-collapse:collapse; font-size:0.82rem;}
+  th, td{text-align:left; padding:8px 6px; border-bottom:1px solid #eee;}
+  th{color:#7a1f3a; text-transform:uppercase; font-size:0.7rem; letter-spacing:0.4px;}
+  .pill{display:inline-block; padding:2px 8px; border-radius:20px; font-size:0.7rem; font-weight:700;}
+  .pill-yes{background:#dff2e1; color:#1f4d2e;}
+  .pill-no{background:#f9dede; color:#5c1616;}
+  .pill-checked{background:#dff2e1; color:#1f4d2e;}
+  .pill-notchecked{background:#eee; color:#666;}
+  .table-wrap{max-height:420px; overflow:auto;}
+  .empty-note{text-align:center; padding:20px; color:#888; font-size:0.85rem;}
+
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<h1>B &amp; P</h1>
+<p class="sub">Wedding Check-In</p>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen" class="card">
+  <h2>Sign In</h2>
+  <label for="loginUser">Username</label>
+  <input type="text" id="loginUser" autocapitalize="none" autocomplete="off">
+  <label for="loginPass">Password</label>
+  <input type="password" id="loginPass">
+  <button class="btn btn-primary" id="loginBtn">Log In</button>
+  <p class="error-msg" id="loginError">Incorrect username or password.</p>
+</div>
+
+<!-- ============ SCANNER (ushers) ============ -->
+<div id="scannerScreen" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+  <div class="topbar">
+    <span>Signed in as <span class="who" id="scannerWho"></span></span>
+    <button id="scannerLogout">Log out</button>
+  </div>
+
+  <div id="reader"></div>
+
+  <div class="manual">
+    <input type="text" id="manualId" placeholder="Or type Guest ID, e.g. BP-K7QX4M" autocapitalize="characters">
+    <button id="manualBtn">Check In</button>
+  </div>
+
+  <div id="result"></div>
+
+  <div id="counter">Checked in today: <b id="checkedInCount">0</b> / <span id="attendingCount">0</span> expected</div>
+</div>
+
+<!-- ============ ADMIN DASHBOARD ============ -->
+<div id="adminScreen" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+  <div class="topbar">
+    <span>Signed in as <span class="who">Admin</span></span>
+    <button id="adminLogout">Log out</button>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-box"><div class="n" id="admAttending">–</div><div class="l">Attending</div></div>
+    <div class="stat-box"><div class="n" id="admDeclined">–</div><div class="l">Declined</div></div>
+    <div class="stat-box"><div class="n" id="admGuests">–</div><div class="l">Total Guests</div></div>
+    <div class="stat-box"><div class="n" id="admCheckedIn">–</div><div class="l">Checked In</div></div>
+  </div>
+
+  <div class="admin-panel">
+    <h2>Guest List</h2>
+    <div class="search-row">
+      <input type="text" id="admSearch" placeholder="Search by name or email">
+      <button id="admRefresh">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table id="admTable">
+        <thead>
+          <tr><th>Name</th><th>Attending</th><th>+1</th><th>Checked In</th><th>Time</th></tr>
+        </thead>
+        <tbody id="admTableBody"></tbody>
+      </table>
+      <p class="empty-note hidden" id="admEmptyNote">No responses yet.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const SESSION_KEY = "bp_checkin_session";
+
+  const loginScreen = document.getElementById("loginScreen");
+  const scannerScreen = document.getElementById("scannerScreen");
+  const adminScreen = document.getElementById("adminScreen");
+
+  function getSession(){
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
+    catch(e){ return null; }
+  }
+  function setSession(user, role, label){
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, role, label }));
+  }
+  function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
+
+  function showScreen(name){
+    loginScreen.classList.toggle("hidden", name !== "login");
+    scannerScreen.classList.toggle("hidden", name !== "scanner");
+    adminScreen.classList.toggle("hidden", name !== "admin");
+  }
+
+  function boot(){
+    const session = getSession();
+    if (!session) { showScreen("login"); return; }
+    if (session.role === "admin") {
+      document.querySelector("#adminScreen .who").textContent = session.label;
+      showScreen("admin");
+      initAdmin();
+    } else {
+      document.getElementById("scannerWho").textContent = session.label;
+      showScreen("scanner");
+      initScanner();
+    }
+  }
+
+  // ---------- Login ----------
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    const uRaw = document.getElementById("loginUser").value.trim();
+    const p = document.getElementById("loginPass").value;
+    const matchKey = Object.keys(CREDENTIALS).find(k => k.toLowerCase() === uRaw.toLowerCase());
+    const entry = matchKey ? CREDENTIALS[matchKey] : null;
+    const errBox = document.getElementById("loginError");
+    if (entry && entry.password === p) {
+      errBox.style.display = "none";
+      setSession(matchKey, entry.role, entry.label);
+      boot();
+    } else {
+      errBox.style.display = "block";
+    }
+  });
+  document.getElementById("loginPass").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("loginBtn").click();
+  });
+
+  document.getElementById("scannerLogout").addEventListener("click", () => { clearSession(); location.reload(); });
+  document.getElementById("adminLogout").addEventListener("click", () => { clearSession(); location.reload(); });
+
+  // ---------- Scanner (ushers) ----------
+  let scannerInitialized = false;
+  function initScanner(){
+    if (scannerInitialized) return;
+    scannerInitialized = true;
+
+    const resultBox = document.getElementById("result");
+    let busy = false;
+
+    function escapeHtml_(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function formatTime_(iso){ try { return new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }); } catch(e){ return ""; } }
+
+    function showResult(status, name, extra){
+      resultBox.style.display = "block";
+      resultBox.className = "";
+      extra = extra || {};
+      let cls, badgeCls, badgeSymbol, statusLine, displayName, detail = "";
+
+      if (status === "ok") {
+        cls="ok"; badgeCls="tick"; badgeSymbol="✓"; statusLine="Checked In"; displayName=name||"Guest";
+        detail = extra.plusOne ? ("Party of 2" + (extra.plusOneName ? " — with " + extra.plusOneName : "")) : "Party of 1";
+        if (extra.dietary) detail += " · Dietary: " + extra.dietary;
+      } else if (status === "already") {
+        cls="warn"; badgeCls="warnbadge"; badgeSymbol="✓"; statusLine="Already Checked In"; displayName=name||"Guest";
+        detail = "Checked in at " + formatTime_(extra.time);
+      } else if (status === "not_attending") {
+        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Not Attending"; displayName=name||"—";
+        detail = "This guest RSVP'd as not attending.";
+      } else if (status === "not_found") {
+        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Not Found"; displayName="No matching guest";
+        detail = "Double-check the code, or search the guest list manually.";
+      } else {
+        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Error"; displayName="Couldn't look this up";
+        detail = "Check your connection and try again.";
+      }
+
+      resultBox.classList.add(cls);
+      resultBox.innerHTML =
+        '<div class="badge ' + badgeCls + '">' + badgeSymbol + '</div>' +
+        '<div class="status-line">' + statusLine + '</div>' +
+        '<div class="guestName">' + escapeHtml_(displayName) + '</div>' +
+        '<p class="detail">' + escapeHtml_(detail) + '</p>';
+    }
+
+    async function checkIn(guestId){
+      if (busy || !guestId) return;
+      busy = true;
+      guestId = guestId.trim().toUpperCase();
+      if (!API_URL) { showResult("error"); busy = false; return; }
+      try {
+        const res = await fetch(API_URL + "?action=checkin&id=" + encodeURIComponent(guestId));
+        const data = await res.json();
+        showResult(data.status, data.name, data);
+      } catch (err) {
+        showResult("error");
+      }
+      refreshCounter();
+      setTimeout(() => { busy = false; }, 1800);
+    }
+
+    async function refreshCounter(){
+      if (!API_URL) return;
+      try {
+        const res = await fetch(API_URL + "?action=stats");
+        const data = await res.json();
+        document.getElementById("checkedInCount").textContent = data.checkedIn || 0;
+        document.getElementById("attendingCount").textContent = data.attending || 0;
+      } catch (err) {}
+    }
+    refreshCounter();
+    setInterval(refreshCounter, 15000);
+
+    document.getElementById("manualBtn").addEventListener("click", () => {
+      const val = document.getElementById("manualId").value;
+      checkIn(val);
+      document.getElementById("manualId").value = "";
+    });
+    document.getElementById("manualId").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("manualBtn").click();
+    });
+
+    if (window.Html5Qrcode) {
+      const scanner = new Html5Qrcode("reader");
+      Html5Qrcode.getCameras().then(cameras => {
+        if (!cameras || !cameras.length) return;
+        const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+        scanner.start(
+          backCam.id, { fps: 10, qrbox: 240 },
+          (decodedText) => { checkIn(decodedText); },
+          () => {}
+        );
+      }).catch(() => {
+        document.getElementById("reader").innerHTML =
+          '<p style="padding:20px;text-align:center;color:#d7a3b3">Camera unavailable — use manual entry below.</p>';
+      });
+    }
+  }
+
+  // ---------- Admin dashboard ----------
+  let allGuests = [];
+  function initAdmin(){
+    loadStats();
+    loadGuestList();
+    document.getElementById("admRefresh").addEventListener("click", () => { loadStats(); loadGuestList(); });
+    document.getElementById("admSearch").addEventListener("input", renderTable);
+  }
+
+  async function loadStats(){
+    try {
+      const res = await fetch(API_URL + "?action=stats");
+      const data = await res.json();
+      document.getElementById("admAttending").textContent = data.attending ?? 0;
+      document.getElementById("admDeclined").textContent = data.declined ?? 0;
+      document.getElementById("admGuests").textContent = data.totalGuests ?? 0;
+      document.getElementById("admCheckedIn").textContent = data.checkedIn ?? 0;
+    } catch (err) {}
+  }
+
+  async function loadGuestList(){
+    try {
+      const res = await fetch(API_URL + "?action=list");
+      const data = await res.json();
+      allGuests = data.responses || [];
+      renderTable();
+    } catch (err) {
+      allGuests = [];
+      renderTable();
+    }
+  }
+
+  function escapeHtml_(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function renderTable(){
+    const q = document.getElementById("admSearch").value.trim().toLowerCase();
+    const tbody = document.getElementById("admTableBody");
+    const emptyNote = document.getElementById("admEmptyNote");
+    const filtered = allGuests.filter(g => {
+      if (!q) return true;
+      return String(g.Name || "").toLowerCase().includes(q) || String(g.Email || "").toLowerCase().includes(q);
+    });
+
+    if (!filtered.length) {
+      tbody.innerHTML = "";
+      emptyNote.classList.remove("hidden");
+      return;
+    }
+    emptyNote.classList.add("hidden");
+
+    tbody.innerHTML = filtered.map(g => {
+      const attending = String(g.Attending || "").toLowerCase() === "yes";
+      const checkedIn = String(g.CheckedIn || "").toLowerCase() === "yes";
+      const plusOne = String(g.PlusOne || "").toLowerCase() === "yes";
+      let timeStr = "";
+      if (g.CheckedInTime) { try { timeStr = new Date(g.CheckedInTime).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); } catch(e){ timeStr = ""; } }
+      return "<tr>" +
+        "<td>" + escapeHtml_(g.Name || "") + "</td>" +
+        "<td><span class='pill " + (attending ? "pill-yes" : "pill-no") + "'>" + (attending ? "Yes" : "No") + "</span></td>" +
+        "<td>" + (plusOne ? "Yes" : "—") + "</td>" +
+        "<td><span class='pill " + (checkedIn ? "pill-checked" : "pill-notchecked") + "'>" + (checkedIn ? "Checked In" : "Not Yet") + "</span></td>" +
+        "<td>" + escapeHtml_(timeStr) + "</td>" +
+      "</tr>";
+    }).join("");
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
