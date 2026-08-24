@@ -1,0 +1,16 @@
+Place the wedding photos in this folder using these exact filenames:
+hero.jpg
+couple.jpg
+venue.jpg
+gallery-hall.jpg
+gallery-rings.jpg
+gallery-city.jpg
+gallery-bouquet.jpg
+gallery-table.jpg
+gallery-cake.jpg
+gallery-roses.jpg
+Benson.jpg
+
+Already supplied:
+- couple.jpg = uploaded couple portrait
+- Benson.jpg = uploaded Benson portrait
