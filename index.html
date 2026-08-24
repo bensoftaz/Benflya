@@ -354,6 +354,16 @@
     .ribbon-track{animation:none}
     .reveal,.mask .mask-inner{opacity:1;transform:none;transition:none}
   }
+
+/* Local replaceable image system */
+.hero{position:relative;overflow:hidden}.hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.hero>*:not(.hero-img){position:relative;z-index:1}
+.story-photo,.venue-photo,.gallery-photo{display:block;width:100%;height:100%;object-fit:cover}.story-photo{aspect-ratio:1/1}.venue-photo{aspect-ratio:16/9}.gallery-photo{aspect-ratio:1/1}.gal-item{overflow:hidden}
+/* Professional responsive RSVP form */
+#rsvp form,#rsvp .rsvp-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;width:100%;box-sizing:border-box}
+#rsvp label{display:block;margin-bottom:7px;font-size:.76rem;letter-spacing:.08em;text-transform:uppercase}
+#rsvp input,#rsvp select,#rsvp textarea{width:100%;box-sizing:border-box;min-height:48px;border-radius:10px;border:1px solid rgba(183,110,121,.35);background:#fff;padding:12px 14px;font:inherit;outline:none}
+#rsvp textarea{min-height:112px;resize:vertical}.rsvp-full,#rsvp .full-width{grid-column:1/-1}
+@media(max-width:700px){#rsvp form,#rsvp .rsvp-form{grid-template-columns:1fr;gap:14px}#rsvp .rsvp-full,#rsvp .full-width{grid-column:auto}#rsvp input,#rsvp select,#rsvp textarea{font-size:16px}#rsvp .rsvp-card{padding:20px 16px}}
 </style>
 </head>
 <body>
@@ -380,6 +390,7 @@
 
 <!-- ================= HERO ================= -->
 <header class="hero" id="home">
+<img class="hero-img" src="images/hero.jpg" alt="Benson and Precious wedding" loading="eager">
   <div class="hero-media" aria-label="Replaceable hero image"><img data-canva-replaceable="true" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1c11e066e-fb00-4ba7-8e55-aaec23049517.png" alt="Wedding hero image — replaceable" loading="eager"></div>
   <div class="hero-veil" aria-hidden="true"></div>
   <canvas id="petals" aria-hidden="true"></canvas>
@@ -431,7 +442,7 @@
   <div class="wrap story-grid">
     <div class="story-sticky">
       <figure class="frame reveal">
-        <div class="photo-black" role="img" aria-label="Couple photo — coming soon"></div>
+        <img class="story-photo" src="images/couple.jpg" alt="Benson and Precious" loading="lazy">
         <figcaption>She said yes to forever · 16 March 2026</figcaption>
       </figure>
       <blockquote class="story-quote reveal" style="--d:.15s">
@@ -611,8 +622,12 @@
     </header>
 
     <div class="gallery" id="galleryGrid">
-      <figure class="gal-item has-img reveal"><img data-canva-replaceable="true" class="ar-43" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1c11e066e-fb00-4ba7-8e55-aaec23049517.png" alt="The ballroom with draped maroon and cream stage, crystal chandeliers and rose column" loading="lazy"><figcaption class="gal-cap">The Hall</figcaption></figure>
-      <figure class="gal-item reveal" style="--d:.06s"><div class="gal-black ar-45" role="img" aria-label="Couple photo — coming soon"></div><figcaption class="gal-cap">The Couple · Soon</figcaption></figure>
+      <figure class="gal-item has-img reveal"><img class="gallery-photo" src="images/gallery-hall.jpg" alt="The Hall" loading="lazy"><figcaption class="gal-cap">The Hall</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.06s"><img data-canva-replaceable="true" class="gallery-photo ar-45" src="images/couple.jpg" alt="The Couple" loading="lazy"><figcaption class="gal-cap">The Couple</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.06s">
+  <img data-canva-replaceable="true" class="gallery-photo ar-45" src="images/Benson.jpg" alt="Benson" loading="lazy">
+  <figcaption class="gal-cap">Benson</figcaption>
+</figure>
       <figure class="gal-item has-img reveal" style="--d:.12s"><img data-canva-replaceable="true" class="ar-34" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/12a566b0e-c4b0-434f-8196-847bc6460a87.png" alt="Wedding rings on burgundy silk" loading="lazy"><figcaption class="gal-cap">The Rings</figcaption></figure>
       <figure class="gal-item has-img reveal" style="--d:.06s"><img data-canva-replaceable="true" class="ar-43" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1cd882175-a275-4db5-a5fb-6818b2eb7f88.png" alt="Doha West Bay skyline at dusk" loading="lazy"><figcaption class="gal-cap">The City</figcaption></figure>
       <figure class="gal-item has-img reveal" style="--d:.12s"><img data-canva-replaceable="true" class="ar-11" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1f31d360e-6f35-421e-a6f4-cdb0b12b3f9b.png" alt="Bridal bouquet of burgundy and caramel roses" loading="lazy"><figcaption class="gal-cap">The Bouquet</figcaption></figure>
