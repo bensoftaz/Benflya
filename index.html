@@ -15,7 +15,7 @@
     partnerA: "Benson",
     partnerB: "Precious",
     weddingDateISO: "2026-10-10T13:00:00+03:00", // ceremony start (1:00 PM), Doha time (UTC+3); doors 12:00
-    rsvpDeadline: "September 1, 2026",
+    rsvpDeadline: "September 15, 2026",
     venueCeremony: "Ballroom 1 · Delta Hotels City Center, Doha, Qatar",
     venueReception: "Ballroom 2 · Delta Hotels City Center, Doha, Qatar",
     themeNote: "Burgundy & Rose Gold",
@@ -643,7 +643,7 @@
     <header class="sec-head" style="text-align:center">
       <p class="sec-kicker reveal">Kindly Respond</p>
       <h2 class="sec-title mask"><span class="mask-inner">RSVP</span></h2>
-      <p class="sec-sub reveal" style="--d:.15s">Please reply by <span data-bind="rsvpDeadline">September 1, 2026</span>. Your RSVP creates your private wedding QR pass.</p>
+      <p class="sec-sub reveal" style="--d:.15s">Please reply by <span data-bind="rsvpDeadline">September 15, 2026</span>. Your RSVP creates your private wedding QR pass.</p>
     </header>
     <div class="rsvp-grid">
       <div class="rsvp-card reveal">
@@ -750,7 +750,7 @@
     var k = el.getAttribute("data-bind");
     if(k==="partnerA") el.textContent = CONFIG.partnerA || "Benson";
     if(k==="partnerB") el.textContent = CONFIG.partnerB || "Precious";
-    if(k==="rsvpDeadline") el.textContent = CONFIG.rsvpDeadline || "September 1, 2026";
+    if(k==="rsvpDeadline") el.textContent = CONFIG.rsvpDeadline || "September 15, 2026";
     if(k==="theme") el.textContent = CONFIG.themeNote || "Burgundy & Rose Gold";
     if(k==="tagline") el.textContent = CONFIG.tagline || "Elegance of Excellence";
   });
