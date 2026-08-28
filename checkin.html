@@ -1,252 +1,3447 @@
-/**
- * Benson & Precious — QR RSVP + Wedding Day Check-In + Payment Tracking
- * Google Apps Script Web App backend.
- *
- * SETUP
- * 1. Open your Google Sheet > Extensions > Apps Script.
- * 2. Replace the ENTIRE contents of Code.gs with this file.
- * 3. Update CONFIG.PAYMENT_IMAGE_URL below if your filename differs.
- * 4. Deploy > Manage deployments > (pencil/edit icon) > Version: "New version" > Deploy.
- *    (Editing code alone does NOT update the live /exec URL — you must redeploy a new version.)
- * 5. Confirm "Who has access" is set to "Anyone".
- * 6. No login/token step is required — checkin.html's own on-page login
- *    (Admin / EventsC01 / EventsC02) is the only access gate. This script
- *    trusts any request that reaches it, same as before.
- */
-const CONFIG = {
-  SHEET_NAME: 'Guests',
-  QR_BASE: 'https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=',
-  PAYMENT_IMAGE_URL: 'https://benflya.online/images/payment-details.png',
-  WEDDING_NAME: 'Benson & Precious Wedding',
-  FROM_NAME: 'Benson & Precious',
-  RSVP_AMOUNT: 'QAR 130'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>Wedding Check-In — Benson & Precious</title>
+
+<meta name="theme-color" content="#2c0a15">
+
+<script>
+"use strict";
+
+/* =========================================================
+   GOOGLE APPS SCRIPT
+   ========================================================= */
+
+const API_URL =
+"https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
+
+
+/* =========================================================
+   LOGIN
+   =========================================================
+
+   IMPORTANT:
+   These credentials are only a front-end access gate.
+   They are NOT real server-side security.
+
+   For a wedding usher page this is acceptable as a basic
+   access barrier, but anyone who can inspect the HTML can
+   technically see these values.
+   ========================================================= */
+
+const CREDENTIALS = {
+
+  EventsC01: {
+    password: "Bernadette",
+    role: "scanner",
+    label: "Usher C01"
+  },
+
+  EventsC02: {
+    password: "Memory",
+    role: "scanner",
+    label: "Usher C02"
+  },
+
+  Admin: {
+    password: "Admin",
+    role: "admin",
+    label: "Administrator"
+  }
+
 };
 
-// Column layout (1-based sheet columns / 0-based array indices):
-// 1  Guest ID          (0)
-// 2  Created At        (1)
-// 3  Name              (2)
-// 4  Email             (3)
-// 5  Attending         (4)
-// 6  Party Size        (5)
-// 7  Plus One Name     (6)
-// 8  Dietary           (7)
-// 9  Message           (8)
-// 10 Checked In At     (9)
-// 11 QR URL            (10)
-// 12 Phone             (11)
-// 13 Payment Status    (12)
-// 14 Payment Email Sent At (13)
 
-function doGet(e) {
-  try {
-    const p = (e && e.parameter) || {};
-    const action = p.action || '';
-    if (action === 'list') return json_(listGuests_());
-    if (action === 'stats') return json_(stats_());
-    if (action === 'checkin') return json_(checkin_(p.id));
-    if (action === 'sendPayment') return json_(sendPayment_(p.id));
-    if (action === 'setPayment') return json_(setPayment_(p.id, p.status));
-    return json_({ status: 'ok', service: 'Benson & Precious RSVP API' });
-  } catch (err) {
-    return json_({ status: 'error', message: String(err.message || err) });
+/* =========================================================
+   CONFIG
+   ========================================================= */
+
+const SESSION_KEY = "bp_checkin_session";
+
+const SCANNER_CONFIG = {
+  fps: 10,
+  qrbox: 250,
+  cooldownMs: 2200
+};
+
+</script>
+
+
+<!-- QR SCANNER -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+
+<style>
+
+/* =========================================================
+   ROOT
+   ========================================================= */
+
+:root {
+  --burgundy-950: #2c0a15;
+  --burgundy-900: #3b0f1d;
+  --burgundy-800: #5c1229;
+
+  --rose: #d7a3b3;
+  --rose-light: #efd6df;
+
+  --gold: #c9a24b;
+  --gold-light: #e2c778;
+
+  --cream: #fdf9f6;
+  --ink: #220812;
+
+  --green: #238636;
+  --green-bg: #e9f7ec;
+
+  --yellow: #9a6700;
+  --yellow-bg: #fff8dc;
+
+  --red: #c62828;
+  --red-bg: #ffeded;
+
+  --border: #e4d9dd;
+
+  --shadow:
+    0 12px 40px rgba(0,0,0,.18);
+}
+
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  background: var(--burgundy-950);
+  color: var(--cream);
+
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+
+/* =========================================================
+   LOGIN
+   ========================================================= */
+
+#loginScreen {
+
+  width: 100%;
+  min-height: 100vh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  padding:
+    max(20px, env(safe-area-inset-top))
+    18px
+    max(20px, env(safe-area-inset-bottom))
+    18px;
+
+  background:
+    radial-gradient(
+      circle at top,
+      rgba(201,162,75,.13),
+      transparent 40%
+    ),
+    var(--burgundy-950);
+}
+
+
+.login-card {
+
+  width: 100%;
+  max-width: 420px;
+
+  background: var(--cream);
+  color: var(--ink);
+
+  border-radius: 18px;
+
+  padding: 30px 24px;
+
+  box-shadow: var(--shadow);
+}
+
+
+.monogram {
+
+  width: 64px;
+  height: 64px;
+
+  margin: 0 auto 18px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+
+  color: var(--burgundy-800);
+
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+
+.login-card h1 {
+
+  margin: 0;
+
+  text-align: center;
+
+  color: var(--burgundy-900);
+
+  font-family: Georgia, serif;
+  font-size: 27px;
+}
+
+
+.login-subtitle {
+
+  margin: 8px 0 25px;
+
+  text-align: center;
+
+  color: #75656a;
+
+  font-size: 14px;
+}
+
+
+.field {
+
+  margin-bottom: 16px;
+}
+
+
+.field label {
+
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: var(--burgundy-800);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.field input {
+
+  width: 100%;
+  min-height: 50px;
+
+  padding: 12px 14px;
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  background: #fff;
+
+  color: var(--ink);
+
+  outline: none;
+}
+
+
+.field input:focus {
+
+  border-color: var(--gold);
+
+  box-shadow:
+    0 0 0 3px rgba(201,162,75,.15);
+}
+
+
+.primary-btn {
+
+  width: 100%;
+  min-height: 52px;
+
+  border: 0;
+  border-radius: 10px;
+
+  background: var(--burgundy-800);
+  color: #fff;
+
+  font-weight: 800;
+}
+
+
+.primary-btn:disabled {
+
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+
+.login-error {
+
+  display: none;
+
+  margin-top: 12px;
+
+  padding: 11px;
+
+  border-radius: 8px;
+
+  background: var(--red-bg);
+  color: var(--red);
+
+  text-align: center;
+
+  font-size: 13px;
+}
+
+
+/* =========================================================
+   APP
+   ========================================================= */
+
+.app {
+
+  width: 100%;
+  min-height: 100vh;
+
+  padding:
+    20px
+    16px
+    max(30px, env(safe-area-inset-bottom))
+    16px;
+}
+
+
+.app-header {
+
+  width: 100%;
+  max-width: 1100px;
+
+  margin: 0 auto 18px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+
+.brand h1 {
+
+  margin: 0;
+
+  font-family: Georgia, serif;
+
+  font-size: clamp(20px, 4vw, 30px);
+}
+
+
+.brand p {
+
+  margin: 5px 0 0;
+
+  color: var(--rose);
+
+  font-size: 13px;
+}
+
+
+.header-actions {
+
+  display: flex;
+  gap: 8px;
+}
+
+
+.small-btn {
+
+  min-height: 42px;
+
+  padding: 9px 13px;
+
+  border-radius: 9px;
+
+  border: 1px solid rgba(201,162,75,.65);
+
+  background: transparent;
+
+  color: var(--gold-light);
+
+  font-weight: 700;
+}
+
+
+.small-btn:hover {
+
+  background: rgba(255,255,255,.07);
+}
+
+
+/* =========================================================
+   CARDS
+   ========================================================= */
+
+.card {
+
+  width: 100%;
+  max-width: 1100px;
+
+  margin: 0 auto 16px;
+
+  background: var(--cream);
+  color: var(--ink);
+
+  border-radius: 16px;
+
+  padding: 22px;
+
+  box-shadow: var(--shadow);
+}
+
+
+.card h2 {
+
+  margin: 0 0 14px;
+
+  color: var(--burgundy-800);
+
+  font-family: Georgia, serif;
+
+  font-size: 20px;
+}
+
+
+/* =========================================================
+   SCANNER
+   ========================================================= */
+
+.scanner-card {
+
+  max-width: 520px;
+
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+.scanner-instruction {
+
+  margin-bottom: 14px;
+
+  color: #66565b;
+
+  font-size: 14px;
+  line-height: 1.5;
+
+  text-align: center;
+}
+
+
+/* Camera */
+
+#reader {
+
+  width: 100%;
+  max-width: 100%;
+
+  overflow: hidden;
+
+  border-radius: 14px;
+
+  background: #14060b;
+}
+
+
+#reader video {
+
+  display: block;
+
+  width: 100% !important;
+
+  height: auto !important;
+
+  max-width: 100%;
+
+  object-fit: cover;
+}
+
+
+#reader img {
+
+  max-width: 100%;
+}
+
+
+/* =========================================================
+   SCAN RESULT
+   ========================================================= */
+
+#result {
+
+  display: none;
+
+  margin-top: 18px;
+
+  padding: 22px 16px;
+
+  border-radius: 15px;
+
+  text-align: center;
+}
+
+
+#result.ok {
+
+  background: var(--green-bg);
+
+  color: var(--green);
+
+  border: 1px solid #b9dfc1;
+}
+
+
+#result.warn {
+
+  background: var(--yellow-bg);
+
+  color: var(--yellow);
+
+  border: 1px solid #ead68c;
+}
+
+
+#result.err {
+
+  background: var(--red-bg);
+
+  color: var(--red);
+
+  border: 1px solid #efbcbc;
+}
+
+
+#result.error {
+
+  background: var(--red-bg);
+
+  color: var(--red);
+
+  border: 1px solid #efbcbc;
+}
+
+
+.badge {
+
+  width: 74px;
+  height: 74px;
+
+  margin: 0 auto 10px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  font-size: 38px;
+  font-weight: 900;
+}
+
+
+.badge.tick {
+
+  background: var(--green);
+  color: #fff;
+}
+
+
+.badge.warnbadge {
+
+  background: #d6a500;
+  color: #fff;
+}
+
+
+.badge.cross {
+
+  background: var(--red);
+  color: #fff;
+}
+
+
+.status-line {
+
+  font-size: 14px;
+
+  font-weight: 800;
+
+  text-transform: uppercase;
+
+  letter-spacing: .08em;
+}
+
+
+.guestName {
+
+  margin-top: 5px;
+
+  font-family: Georgia, serif;
+
+  font-size: clamp(25px, 7vw, 38px);
+
+  font-weight: 700;
+
+  overflow-wrap: anywhere;
+}
+
+
+.detail {
+
+  margin: 9px 0 0;
+
+  font-size: 14px;
+
+  line-height: 1.5;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   MANUAL ENTRY
+   ========================================================= */
+
+.manual {
+
+  margin-top: 18px;
+
+  padding-top: 18px;
+
+  border-top: 1px solid #eee;
+}
+
+
+.manual label {
+
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: var(--burgundy-800);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.manual-row {
+
+  display: flex;
+
+  gap: 8px;
+}
+
+
+.manual-row input {
+
+  flex: 1;
+
+  min-width: 0;
+
+  min-height: 50px;
+
+  padding: 12px;
+
+  border: 1px solid var(--border);
+
+  border-radius: 9px;
+
+  text-transform: uppercase;
+}
+
+
+.manual-row button {
+
+  flex: 0 0 100px;
+
+  min-height: 50px;
+
+  border: 0;
+
+  border-radius: 9px;
+
+  background: var(--burgundy-800);
+
+  color: #fff;
+
+  font-weight: 800;
+}
+
+
+/* =========================================================
+   COUNTER
+   ========================================================= */
+
+.counter {
+
+  max-width: 520px;
+
+  margin: 16px auto 0;
+
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 10px;
+}
+
+
+.counter-box {
+
+  padding: 14px;
+
+  border-radius: 10px;
+
+  background: #f5eef0;
+
+  text-align: center;
+}
+
+
+.counter-number {
+
+  color: var(--burgundy-800);
+
+  font-size: 27px;
+
+  font-weight: 900;
+}
+
+
+.counter-label {
+
+  margin-top: 2px;
+
+  color: #75656a;
+
+  font-size: 11px;
+
+  text-transform: uppercase;
+
+  letter-spacing: .08em;
+}
+
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+
+.admin-container {
+
+  width: 100%;
+  max-width: 1100px;
+
+  margin: 0 auto;
+}
+
+
+.stat-grid {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: 12px;
+
+  margin-bottom: 16px;
+}
+
+
+.stat-box {
+
+  padding: 18px;
+
+  background: var(--cream);
+
+  color: var(--ink);
+
+  border-radius: 13px;
+
+  text-align: center;
+
+  box-shadow: var(--shadow);
+}
+
+
+.stat-box .n {
+
+  color: var(--burgundy-800);
+
+  font-size: 30px;
+
+  font-weight: 900;
+}
+
+
+.stat-box .l {
+
+  margin-top: 3px;
+
+  color: #75656a;
+
+  font-size: 11px;
+
+  text-transform: uppercase;
+
+  letter-spacing: .08em;
+}
+
+
+/* =========================================================
+   ADMIN SEARCH
+   ========================================================= */
+
+.search-row {
+
+  display: flex;
+
+  gap: 8px;
+
+  margin-bottom: 15px;
+}
+
+
+.search-row input {
+
+  flex: 1;
+
+  min-width: 0;
+
+  min-height: 48px;
+
+  padding: 11px 13px;
+
+  border: 1px solid var(--border);
+
+  border-radius: 9px;
+}
+
+
+.search-row button {
+
+  min-width: 90px;
+
+  border: 0;
+
+  border-radius: 9px;
+
+  background: var(--burgundy-800);
+
+  color: #fff;
+
+  font-weight: 800;
+}
+
+
+/* =========================================================
+   TABLE
+   ========================================================= */
+
+.table-wrap {
+
+  width: 100%;
+
+  overflow-x: auto;
+
+  -webkit-overflow-scrolling: touch;
+}
+
+
+table {
+
+  width: 100%;
+
+  min-width: 720px;
+
+  border-collapse: collapse;
+}
+
+
+th,
+td {
+
+  padding: 12px 10px;
+
+  border-bottom: 1px solid #eee;
+
+  text-align: left;
+
+  vertical-align: middle;
+
+  font-size: 13px;
+}
+
+
+th {
+
+  background: #f8f1f3;
+
+  color: var(--burgundy-800);
+
+  font-size: 11px;
+
+  text-transform: uppercase;
+
+  letter-spacing: .06em;
+}
+
+
+/* =========================================================
+   PAYMENT BUTTON
+   ========================================================= */
+
+.payment-btn {
+
+  min-height: 38px;
+
+  padding: 7px 10px;
+
+  border: 0;
+
+  border-radius: 7px;
+
+  background: var(--burgundy-800);
+
+  color: #fff;
+
+  font-size: 12px;
+
+  font-weight: 800;
+}
+
+
+.payment-btn:disabled {
+
+  opacity: .55;
+
+  cursor: wait;
+}
+
+
+.payment-status {
+
+  margin-top: 6px;
+
+  font-size: 11px;
+
+  font-weight: 700;
+}
+
+
+.payment-status.success {
+
+  color: var(--green);
+}
+
+
+.payment-status.error {
+
+  color: var(--red);
+}
+
+
+.payment-status.sending {
+
+  color: var(--yellow);
+}
+
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+
+.badge-small {
+
+  display: inline-block;
+
+  padding: 4px 8px;
+
+  border-radius: 99px;
+
+  font-size: 10px;
+
+  font-weight: 800;
+}
+
+
+.badge-attending {
+
+  background: var(--green-bg);
+
+  color: var(--green);
+}
+
+
+.badge-declined {
+
+  background: var(--red-bg);
+
+  color: var(--red);
+}
+
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.empty-note {
+
+  padding: 25px;
+
+  text-align: center;
+
+  color: #76676b;
+}
+
+
+/* =========================================================
+   TOAST
+   ========================================================= */
+
+#toast {
+
+  position: fixed;
+
+  left: 50%;
+
+  bottom:
+    max(18px, env(safe-area-inset-bottom));
+
+  transform:
+    translate(-50%, 20px);
+
+  width: min(90vw, 420px);
+
+  padding: 12px 16px;
+
+  border-radius: 10px;
+
+  background: #171013;
+
+  color: #fff;
+
+  text-align: center;
+
+  font-size: 13px;
+
+  font-weight: 700;
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition: .25s ease;
+
+  z-index: 9999;
+}
+
+
+#toast.show {
+
+  opacity: 1;
+
+  transform: translate(-50%, 0);
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+  .app {
+
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .app-header {
+
+    align-items: flex-start;
+  }
+
+  .header-actions {
+
+    flex-direction: column;
+  }
+
+  .small-btn {
+
+    min-height: 40px;
+  }
+
+  .card {
+
+    padding: 18px 14px;
+
+    border-radius: 13px;
+  }
+
+  .stat-grid {
+
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .search-row {
+
+    flex-direction: column;
+  }
+
+  .search-row button {
+
+    width: 100%;
+
+    min-height: 48px;
+  }
+
+  .manual-row {
+
+    flex-direction: column;
+  }
+
+  .manual-row button {
+
+    width: 100%;
+
+    flex-basis: auto;
+  }
+
+  #reader {
+
+    border-radius: 10px;
   }
 }
 
-function doPost(e) {
-  try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    const action = body.action || 'rsvp';
-    if (action === 'rsvp') return json_(saveRsvp_(body));
-    return json_({ status: 'error', message: 'Unknown action' });
-  } catch (err) {
-    return json_({ status: 'error', message: String(err.message || err) });
-  }
-}
 
-/* ---------------- RSVP submission ---------------- */
+@media (max-width: 420px) {
 
-function saveRsvp_(d) {
-  const name = String(d.name || '').trim();
-  const email = String(d.email || '').trim();
-  const phone = String(d.phone || '').trim();
-  const attending = String(d.attending || '').toLowerCase();
-  if (!name || !email || !['yes', 'no'].includes(attending)) {
-    throw new Error('Name, email and attendance are required.');
+  .login-card {
+
+    padding: 24px 16px;
   }
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = getSheet_(ss);
-  const guestId = uniqueGuestId_(sh);
-  const partySize = Math.max(0, Math.min(10, Number(d.partySize || 0)));
-  const plusOneName = String(d.plusOneName || '').trim();
-  const qrUrl = CONFIG.QR_BASE + encodeURIComponent(guestId);
-  const now = new Date();
+  .app-header {
 
-  sh.appendRow([
-    guestId, now, name, email, attending, partySize, plusOneName,
-    String(d.dietary || '').trim(), String(d.message || '').trim(),
-    '', qrUrl, phone, '', ''
-  ]);
-
-  if (attending === 'yes' && email) sendQrEmail_(email, name, guestId, partySize, qrUrl);
-  return { status: 'success', guestId: guestId, qrUrl: qrUrl };
-}
-
-function sendQrEmail_(email, name, guestId, partySize, qrUrl) {
-  const party = partySize ? ' + ' + partySize + (partySize === 1 ? ' guest' : ' guests') : '';
-  const qrBlob = UrlFetchApp.fetch(qrUrl).getBlob().setName('wedding-qr.png');
-  const html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">' +
-    '<h2 style="color:#55162A">Your Wedding QR Pass</h2>' +
-    '<p>Dear ' + escapeHtml_(name) + ',</p>' +
-    '<p>Your RSVP for <b>' + CONFIG.WEDDING_NAME + '</b> has been received.</p>' +
-    '<p><b>Guest ID:</b> ' + guestId + '<br><b>Party:</b> ' + escapeHtml_(name + party) + '</p>' +
-    '<p>Show the QR code below at the entrance on October 10, 2026.</p>' +
-    '<p><img src="cid:weddingQr" width="300" height="300" alt="Wedding QR code"></p>' +
-    '<p>Please save this email or QR image. A second scan will be flagged automatically.</p>' +
-    '<p>With love,<br>' + CONFIG.FROM_NAME + '</p></div>';
-  MailApp.sendEmail({ to: email, subject: 'Your wedding QR pass — Benson & Precious', htmlBody: html, inlineImages: { weddingQr: qrBlob }, name: CONFIG.FROM_NAME });
-}
-
-/* ---------------- Payment details email + status ---------------- */
-
-function sendPayment_(guestId) {
-  guestId = String(guestId || '').trim().toUpperCase();
-  if (!guestId) return { status: 'error', message: 'Missing guest ID.' };
-
-  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  const values = sh.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]).toUpperCase() === guestId) {
-      const name = String(values[i][2]);
-      const email = String(values[i][3] || '');
-      if (!email) return { status: 'error', message: 'No email on file for this guest.' };
-      sendPaymentEmail_(email, name, guestId);
-      sh.getRange(i + 1, 14).setValue(new Date()); // column 14 = Payment Email Sent At
-      return { status: 'success', email: email };
-    }
+    flex-direction: column;
   }
-  return { status: 'error', message: 'Guest not found.' };
-}
 
-function sendPaymentEmail_(email, name, guestId) {
-  const html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">' +
-    '<h2 style="color:#55162A">Wedding Payment Details</h2>' +
-    '<p>Dear ' + escapeHtml_(name) + ',</p>' +
-    '<p>Thank you for RSVPing to <b>' + CONFIG.WEDDING_NAME + '</b>! To secure your seat, please complete payment of <b>' + CONFIG.RSVP_AMOUNT + '</b> using the details below.</p>' +
-    '<p><img src="' + CONFIG.PAYMENT_IMAGE_URL + '" width="400" alt="Payment details"></p>' +
-    '<p><b>Important:</b> please use your Guest ID as the payment reference: <b>' + guestId + '</b></p>' +
-    '<p>Once we confirm your payment, your wedding QR pass will follow separately.</p>' +
-    '<p>With love,<br>' + CONFIG.FROM_NAME + '</p></div>';
-  MailApp.sendEmail({ to: email, subject: 'Payment details — Benson & Precious Wedding', htmlBody: html, name: CONFIG.FROM_NAME });
-}
+  .header-actions {
 
-function setPayment_(guestId, status) {
-  status = String(status || '').toLowerCase();
-  if (!['paid', 'unpaid'].includes(status)) return { status: 'error', message: 'Invalid status.' };
-  guestId = String(guestId || '').trim().toUpperCase();
+    width: 100%;
 
-  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  const values = sh.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]).toUpperCase() === guestId) {
-      sh.getRange(i + 1, 13).setValue(status); // column 13 = Payment Status
-      return { status: 'success' };
-    }
+    flex-direction: row;
   }
-  return { status: 'error', message: 'Guest not found.' };
+
+  .header-actions button {
+
+    flex: 1;
+  }
+
+  .stat-grid {
+
+    gap: 8px;
+  }
+
+  .stat-box {
+
+    padding: 13px 7px;
+  }
+
+  .stat-box .n {
+
+    font-size: 24px;
+  }
+
 }
 
-/* ---------------- Check-in (scanner) ---------------- */
 
-function checkin_(guestId) {
-  guestId = String(guestId || '').trim().toUpperCase();
-  if (!guestId) return { status: 'not_found' };
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
 
-  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  const values = sh.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]).toUpperCase() === guestId) {
-      const name = String(values[i][2]);
-      const attending = String(values[i][4]).toLowerCase();
-      const plusOneName = String(values[i][6] || '');
-      const dietary = String(values[i][7] || '');
-      const checkedAt = values[i][9];
+@media (prefers-reduced-motion: reduce) {
 
-      if (attending !== 'yes') return { status: 'not_attending', name: name };
-      if (checkedAt) {
-        return { status: 'already', name: name, time: new Date(checkedAt).toISOString(), plusOne: !!plusOneName, plusOneName: plusOneName, dietary: dietary };
+  * {
+
+    animation-duration: .01ms !important;
+
+    transition-duration: .01ms !important;
+  }
+
+}
+
+</style>
+</head>
+
+
+<body>
+
+
+<!-- =======================================================
+     LOGIN SCREEN
+     ======================================================= -->
+
+<section id="loginScreen">
+
+  <div class="login-card">
+
+    <div class="monogram">
+      B &amp; P
+    </div>
+
+    <h1>
+      Wedding Check-In
+    </h1>
+
+    <p class="login-subtitle">
+      Benson &amp; Precious · 10 October 2026
+    </p>
+
+
+    <div class="field">
+
+      <label for="loginUser">
+        Username
+      </label>
+
+      <input
+        id="loginUser"
+        type="text"
+        autocomplete="username"
+        placeholder="Enter username"
+      >
+
+    </div>
+
+
+    <div class="field">
+
+      <label for="loginPass">
+        Password
+      </label>
+
+      <input
+        id="loginPass"
+        type="password"
+        autocomplete="current-password"
+        placeholder="Enter password"
+      >
+
+    </div>
+
+
+    <button
+      id="loginBtn"
+      class="primary-btn"
+      type="button"
+    >
+      Sign In
+    </button>
+
+
+    <div
+      id="loginError"
+      class="login-error"
+      role="alert"
+    >
+      Incorrect username or password.
+    </div>
+
+  </div>
+
+</section>
+
+
+
+<!-- =======================================================
+     USHER SCANNER
+     ======================================================= -->
+
+<section
+  id="scannerScreen"
+  class="app hidden"
+>
+
+  <header class="app-header">
+
+    <div class="brand">
+
+      <h1>
+        Guest Check-In
+      </h1>
+
+      <p>
+        Signed in as <strong id="scannerWho">Usher</strong>
+      </p>
+
+    </div>
+
+
+    <div class="header-actions">
+
+      <button
+        id="scannerLogout"
+        class="small-btn"
+        type="button"
+      >
+        Log Out
+      </button>
+
+    </div>
+
+  </header>
+
+
+  <main class="scanner-card card">
+
+    <h2>
+      Scan Guest QR
+    </h2>
+
+    <p class="scanner-instruction">
+      Ask the guest to display their QR pass.
+      Point the phone camera at the QR code.
+    </p>
+
+
+    <div id="reader"></div>
+
+
+    <!-- RESULT -->
+
+    <div
+      id="result"
+      role="status"
+      aria-live="polite"
+    ></div>
+
+
+    <!-- MANUAL -->
+
+    <div class="manual">
+
+      <label for="manualId">
+        Manual Guest ID
+      </label>
+
+      <div class="manual-row">
+
+        <input
+          id="manualId"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          placeholder="BP-XXXXXX"
+        >
+
+        <button
+          id="manualBtn"
+          type="button"
+        >
+          Check In
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <!-- COUNTER -->
+
+    <div class="counter">
+
+      <div class="counter-box">
+
+        <div
+          class="counter-number"
+          id="checkedInCount"
+        >
+          0
+        </div>
+
+        <div class="counter-label">
+          Checked In
+        </div>
+
+      </div>
+
+
+      <div class="counter-box">
+
+        <div
+          class="counter-number"
+          id="attendingCount"
+        >
+          0
+        </div>
+
+        <div class="counter-label">
+          Expected
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+</section>
+
+
+
+<!-- =======================================================
+     ADMIN
+     ======================================================= -->
+
+<section
+  id="adminScreen"
+  class="app hidden"
+>
+
+  <header class="app-header">
+
+    <div class="brand">
+
+      <h1>
+        Wedding Admin
+      </h1>
+
+      <p>
+        <span class="who">Administrator</span>
+      </p>
+
+    </div>
+
+
+    <div class="header-actions">
+
+      <button
+        id="admRefresh"
+        class="small-btn"
+        type="button"
+      >
+        Refresh
+      </button>
+
+      <button
+        id="adminLogout"
+        class="small-btn"
+        type="button"
+      >
+        Log Out
+      </button>
+
+    </div>
+
+  </header>
+
+
+  <main class="admin-container">
+
+
+    <!-- STATISTICS -->
+
+    <div class="stat-grid">
+
+      <div class="stat-box">
+
+        <div
+          class="n"
+          id="admAttending"
+        >
+          0
+        </div>
+
+        <div class="l">
+          Attending
+        </div>
+
+      </div>
+
+
+      <div class="stat-box">
+
+        <div
+          class="n"
+          id="admDeclined"
+        >
+          0
+        </div>
+
+        <div class="l">
+          Declined
+        </div>
+
+      </div>
+
+
+      <div class="stat-box">
+
+        <div
+          class="n"
+          id="admGuests"
+        >
+          0
+        </div>
+
+        <div class="l">
+          Total Guests
+        </div>
+
+      </div>
+
+
+      <div class="stat-box">
+
+        <div
+          class="n"
+          id="admCheckedIn"
+        >
+          0
+        </div>
+
+        <div class="l">
+          Checked In
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- GUEST LIST -->
+
+    <section class="card">
+
+      <h2>
+        Guest List
+      </h2>
+
+
+      <div class="search-row">
+
+        <input
+          id="admSearch"
+          type="search"
+          placeholder="Search by name, email or guest ID"
+          autocomplete="off"
+        >
+
+        <button
+          id="admRefresh2"
+          type="button"
+        >
+          Refresh
+        </button>
+
+      </div>
+
+
+      <div class="table-wrap">
+
+        <table>
+
+          <thead>
+
+            <tr>
+
+              <th>
+                Guest
+              </th>
+
+              <th>
+                Email
+              </th>
+
+              <th>
+                RSVP
+              </th>
+
+              <th>
+                Party
+              </th>
+
+              <th>
+                Check-In
+              </th>
+
+              <th>
+                Payment
+              </th>
+
+            </tr>
+
+          </thead>
+
+
+          <tbody id="admTableBody"></tbody>
+
+        </table>
+
+
+        <p
+          id="admEmptyNote"
+          class="empty-note hidden"
+        >
+          No RSVP responses found.
+        </p>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</section>
+
+
+
+<div
+  id="toast"
+  role="status"
+  aria-live="polite"
+></div>
+
+
+
+<script>
+(function(){
+
+"use strict";
+
+
+/* =========================================================
+   GENERAL HELPERS
+   ========================================================= */
+
+const $ = id =>
+  document.getElementById(id);
+
+
+function escapeHtml(value) {
+
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+function showToast(message) {
+
+  const toast = $("toast");
+
+  toast.textContent = message;
+
+  toast.classList.add("show");
+
+  clearTimeout(window.__toastTimer);
+
+  window.__toastTimer =
+    setTimeout(
+      () => toast.classList.remove("show"),
+      4000
+    );
+}
+
+
+/* =========================================================
+   API
+   ========================================================= */
+
+function apiUrl(action, params = {}) {
+
+  const query =
+    new URLSearchParams({
+      action,
+      ...params
+    });
+
+  return API_URL + "?" + query.toString();
+}
+
+
+async function apiGet(action, params = {}) {
+
+  if (!API_URL) {
+
+    throw new Error("API URL is not configured.");
+  }
+
+
+  const response =
+    await fetch(
+      apiUrl(action, params),
+      {
+        method: "GET",
+        cache: "no-store"
       }
-      const stamp = new Date();
-      sh.getRange(i + 1, 10).setValue(stamp);
-      return { status: 'ok', name: name, plusOne: !!plusOneName, plusOneName: plusOneName, dietary: dietary };
+    );
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Server returned HTTP " +
+      response.status
+    );
+  }
+
+
+  const text =
+    await response.text();
+
+
+  let data;
+
+  try {
+
+    data = JSON.parse(text);
+
+  } catch (error) {
+
+    console.error(
+      "Invalid JSON returned by Apps Script:",
+      text
+    );
+
+    throw new Error(
+      "Invalid response from Google Apps Script."
+    );
+  }
+
+
+  return data;
+}
+
+
+/* =========================================================
+   SESSION
+   ========================================================= */
+
+function getSession() {
+
+  try {
+
+    return JSON.parse(
+      sessionStorage.getItem(
+        SESSION_KEY
+      ) || "null"
+    );
+
+  } catch (error) {
+
+    return null;
+  }
+}
+
+
+function setSession(
+  username,
+  role,
+  label
+) {
+
+  sessionStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({
+      username,
+      role,
+      label,
+      loginTime: Date.now()
+    })
+  );
+}
+
+
+function clearSession() {
+
+  sessionStorage.removeItem(
+    SESSION_KEY
+  );
+}
+
+
+function showScreen(screen) {
+
+  $("loginScreen")
+    .classList.toggle(
+      "hidden",
+      screen !== "login"
+    );
+
+  $("scannerScreen")
+    .classList.toggle(
+      "hidden",
+      screen !== "scanner"
+    );
+
+  $("adminScreen")
+    .classList.toggle(
+      "hidden",
+      screen !== "admin"
+    );
+}
+
+
+/* =========================================================
+   BOOT
+   ========================================================= */
+
+let scannerStarted = false;
+
+
+async function boot() {
+
+  const session =
+    getSession();
+
+
+  if (!session) {
+
+    showScreen("login");
+
+    return;
+  }
+
+
+  if (session.role === "admin") {
+
+    $("adminScreen")
+      .querySelector(".who")
+      .textContent =
+      session.label;
+
+    showScreen("admin");
+
+    await initAdmin();
+
+    return;
+  }
+
+
+  $("scannerWho")
+    .textContent =
+    session.label;
+
+  showScreen("scanner");
+
+  await initScanner();
+}
+
+
+/* =========================================================
+   LOGIN
+   ========================================================= */
+
+$("loginBtn")
+.addEventListener(
+  "click",
+  login
+);
+
+
+$("loginPass")
+.addEventListener(
+  "keydown",
+  event => {
+
+    if (event.key === "Enter") {
+
+      login();
     }
   }
-  return { status: 'not_found' };
-}
+);
 
-/* ---------------- Stats + list (admin dashboard) ---------------- */
 
-function stats_() {
-  const v = getSheet_(SpreadsheetApp.getActiveSpreadsheet()).getDataRange().getValues();
-  let attending = 0, declined = 0, checkedIn = 0, paid = 0;
-  for (let i = 1; i < v.length; i++) {
-    const att = String(v[i][4]).toLowerCase();
-    if (att === 'yes') attending++;
-    if (att === 'no') declined++;
-    if (v[i][9]) checkedIn++;
-    if (String(v[i][12] || '').toLowerCase() === 'paid') paid++;
+async function login() {
+
+  const username =
+    $("loginUser")
+      .value
+      .trim();
+
+
+  const password =
+    $("loginPass")
+      .value;
+
+
+  const match =
+    Object.keys(CREDENTIALS)
+      .find(
+        key =>
+          key.toLowerCase() ===
+          username.toLowerCase()
+      );
+
+
+  const entry =
+    match
+      ? CREDENTIALS[match]
+      : null;
+
+
+  if (
+    !entry ||
+    entry.password !== password
+  ) {
+
+    $("loginError")
+      .style.display = "block";
+
+    return;
   }
-  return { status: 'success', attending: attending, declined: declined, totalGuests: v.length - 1, checkedIn: checkedIn, paid: paid };
+
+
+  $("loginError")
+    .style.display = "none";
+
+
+  setSession(
+    match,
+    entry.role,
+    entry.label
+  );
+
+
+  $("loginUser").value = "";
+  $("loginPass").value = "";
+
+
+  await boot();
 }
 
-function listGuests_() {
-  const v = getSheet_(SpreadsheetApp.getActiveSpreadsheet()).getDataRange().getValues();
-  const responses = v.slice(1).map(function (r) {
-    return {
-      GuestId: String(r[0] || ''),
-      Name: String(r[2] || ''),
-      Email: String(r[3] || ''),
-      Attending: String(r[4] || ''),
-      PartySize: Number(r[5] || 0),
-      PlusOneName: String(r[6] || ''),
-      PlusOne: r[6] ? 'yes' : 'no',
-      Dietary: String(r[7] || ''),
-      Message: String(r[8] || ''),
-      CheckedIn: r[9] ? 'yes' : 'no',
-      CheckedInTime: r[9] ? new Date(r[9]).toISOString() : '',
-      Phone: String(r[11] || ''),
-      PaymentStatus: String(r[12] || ''),
-      PaymentEmailSentAt: r[13] ? new Date(r[13]).toISOString() : ''
-    };
-  });
-  return { status: 'success', responses: responses };
-}
 
-/* ---------------- Sheet + helpers ---------------- */
+/* =========================================================
+   LOGOUT
+   ========================================================= */
 
-function getSheet_(ss) {
-  const headers = ['Guest ID', 'Created At', 'Name', 'Email', 'Attending', 'Party Size', 'Plus One Name', 'Dietary', 'Message', 'Checked In At', 'QR URL', 'Phone', 'Payment Status', 'Payment Email Sent At'];
-  let sh = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sh) {
-    sh = ss.insertSheet(CONFIG.SHEET_NAME);
-    sh.appendRow(headers);
-    sh.setFrozenRows(1);
-  } else {
-    const lastCol = sh.getLastColumn();
-    if (lastCol < headers.length) {
-      sh.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]);
+$("scannerLogout")
+.addEventListener(
+  "click",
+  async () => {
+
+    await stopScanner();
+
+    clearSession();
+
+    location.reload();
+  }
+);
+
+
+$("adminLogout")
+.addEventListener(
+  "click",
+  () => {
+
+    clearSession();
+
+    location.reload();
+  }
+);
+
+
+/* =========================================================
+   SCANNER
+   ========================================================= */
+
+let html5Scanner = null;
+
+let scannerBusy = false;
+
+let lastScannedId = "";
+
+let lastScanTime = 0;
+
+
+async function initScanner() {
+
+  if (scannerStarted) {
+
+    return;
+  }
+
+
+  scannerStarted = true;
+
+
+  await refreshCounter();
+
+
+  if (!window.Html5Qrcode) {
+
+    showScannerError(
+      "QR scanner library could not load. Use manual entry below."
+    );
+
+    return;
+  }
+
+
+  html5Scanner =
+    new Html5Qrcode(
+      "reader"
+    );
+
+
+  try {
+
+    const cameras =
+      await Html5Qrcode
+        .getCameras();
+
+
+    if (
+      !cameras ||
+      !cameras.length
+    ) {
+
+      throw new Error(
+        "No camera found."
+      );
     }
+
+
+    let camera =
+      cameras.find(
+        item =>
+          /back|rear|environment/i
+            .test(item.label)
+      );
+
+
+    if (!camera) {
+
+      camera =
+        cameras[
+          cameras.length - 1
+        ];
+    }
+
+
+    await html5Scanner.start(
+
+      camera.id,
+
+      {
+        fps:
+          SCANNER_CONFIG.fps,
+
+        qrbox:
+          {
+            width: 250,
+            height: 250
+          },
+
+        aspectRatio: 1
+      },
+
+      decodedText => {
+
+        handleScan(
+          decodedText
+        );
+      },
+
+      () => {}
+
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Camera error:",
+      error
+    );
+
+    showScannerError(
+      "Camera unavailable. Allow camera permission or use manual entry below."
+    );
   }
-  return sh;
 }
 
-function uniqueGuestId_(sh) {
-  const existing = new Set(sh.getRange(2, 1, Math.max(0, sh.getLastRow() - 1), 1).getValues().flat().map(String));
-  let id;
-  do { id = 'BP-' + Utilities.getUuid().replace(/-/g, '').substring(0, 6).toUpperCase(); } while (existing.has(id));
+
+function showScannerError(message) {
+
+  $("reader").innerHTML =
+    `<div style="
+      padding:24px;
+      color:#efd6df;
+      text-align:center;
+      line-height:1.5;
+    ">
+      ${escapeHtml(message)}
+    </div>`;
+}
+
+
+/* =========================================================
+   STOP SCANNER
+   ========================================================= */
+
+async function stopScanner() {
+
+  if (!html5Scanner) {
+
+    return;
+  }
+
+
+  try {
+
+    await html5Scanner.stop();
+
+  } catch (error) {
+
+    console.warn(
+      "Scanner stop:",
+      error
+    );
+  }
+
+
+  try {
+
+    await html5Scanner.clear();
+
+  } catch (error) {
+
+    console.warn(
+      "Scanner clear:",
+      error
+    );
+  }
+
+
+  html5Scanner = null;
+
+  scannerStarted = false;
+}
+
+
+/* =========================================================
+   SCAN HANDLER
+   ========================================================= */
+
+function normalizeGuestId(value) {
+
+  let id =
+    String(value || "")
+      .trim()
+      .toUpperCase();
+
+
+  /*
+   QR may contain a full URL.
+
+   Example:
+
+   https://benflya.online/checkin.html?id=BP-ABC123
+  */
+
+  try {
+
+    const url =
+      new URL(id);
+
+
+    const fromUrl =
+      url.searchParams.get("id") ||
+      url.searchParams.get("guestId");
+
+
+    if (fromUrl) {
+
+      id =
+        fromUrl
+          .trim()
+          .toUpperCase();
+    }
+
+  } catch (error) {
+
+    /* Not a URL — that's fine. */
+  }
+
+
+  /*
+   Also support QR values such as:
+
+   BP-ABC123
+   guestId=BP-ABC123
+  */
+
+  const match =
+    id.match(
+      /(BP-[A-Z0-9]+)/i
+    );
+
+
+  if (match) {
+
+    return match[1]
+      .toUpperCase();
+  }
+
+
   return id;
 }
 
-function escapeHtml_(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+function handleScan(decodedText) {
+
+  const guestId =
+    normalizeGuestId(
+      decodedText
+    );
+
+
+  if (!guestId) {
+
+    return;
+  }
+
+
+  const now =
+    Date.now();
+
+
+  /*
+   Prevent the same QR from being
+   submitted repeatedly while the
+   camera is still seeing it.
+  */
+
+  if (
+    guestId === lastScannedId &&
+    now - lastScanTime <
+      SCANNER_CONFIG.cooldownMs
+  ) {
+
+    return;
+  }
+
+
+  lastScannedId = guestId;
+
+  lastScanTime = now;
+
+
+  checkIn(guestId);
+}
+
+
+/* =========================================================
+   CHECK-IN
+   ========================================================= */
+
+async function checkIn(
+  guestId
+) {
+
+  if (
+    scannerBusy ||
+    !guestId
+  ) {
+
+    return;
+  }
+
+
+  scannerBusy = true;
+
+
+  guestId =
+    normalizeGuestId(
+      guestId
+    );
+
+
+  showLoadingResult(
+    guestId
+  );
+
+
+  try {
+
+    /*
+     * This calls the Apps Script
+     * endpoint:
+     *
+     * ?action=checkin&id=BP-XXXXXX
+     */
+
+    const data =
+      await apiGet(
+        "checkin",
+        {
+          id: guestId
+        }
+      );
+
+
+    console.log(
+      "Check-in response:",
+      data
+    );
+
+
+    renderResult(
+      data
+    );
+
+
+    await refreshCounter();
+
+
+  } catch (error) {
+
+    console.error(
+      "Check-in error:",
+      error
+    );
+
+
+    renderResult({
+      status: "error",
+      message:
+        "Unable to contact the RSVP database."
+    });
+
+  } finally {
+
+    setTimeout(
+      () => {
+        scannerBusy = false;
+      },
+      SCANNER_CONFIG.cooldownMs
+    );
+  }
+}
+
+
+/* =========================================================
+   RESULT LOADING
+   ========================================================= */
+
+function showLoadingResult(
+  guestId
+) {
+
+  const result =
+    $("result");
+
+
+  result.style.display =
+    "block";
+
+
+  result.className =
+    "warn";
+
+
+  result.innerHTML = `
+
+    <div class="badge warnbadge">
+      …
+    </div>
+
+    <div class="status-line">
+      Checking
+    </div>
+
+    <div class="guestName">
+      ${escapeHtml(guestId)}
+    </div>
+
+    <p class="detail">
+      Looking up guest details…
+    </p>
+
+  `;
+}
+
+
+/* =========================================================
+   RESULT DISPLAY
+   ========================================================= */
+
+function renderResult(
+  data
+) {
+
+  const result =
+    $("result");
+
+
+  const status =
+    String(
+      data?.status || ""
+    ).toLowerCase();
+
+
+  const name =
+    data?.name ||
+    data?.guestName ||
+    "Guest";
+
+
+  let html = "";
+
+
+  if (
+    status === "ok" ||
+    status === "success"
+  ) {
+
+    result.className =
+      "ok";
+
+
+    let party =
+      data.partySize;
+
+
+    if (
+      party === undefined ||
+      party === null ||
+      party === ""
+    ) {
+
+      party =
+        data.plusOne
+          ? 2
+          : 1;
+    }
+
+
+    let detail =
+      `Party of ${escapeHtml(
+        party
+      )}`;
+
+
+    if (
+      data.plusOneName
+    ) {
+
+      detail +=
+        ` · +1: ${escapeHtml(
+          data.plusOneName
+        )}`;
+    }
+
+
+    if (
+      data.dietary
+    ) {
+
+      detail +=
+        ` · Dietary: ${escapeHtml(
+          data.dietary
+        )}`;
+    }
+
+
+    result.innerHTML = `
+
+      <div class="badge tick">
+        ✓
+      </div>
+
+      <div class="status-line">
+        Checked In
+      </div>
+
+      <div class="guestName">
+        ${escapeHtml(name)}
+      </div>
+
+      <p class="detail">
+        ${detail}
+      </p>
+
+    `;
+
+
+    return;
+  }
+
+
+  if (
+    status === "already"
+  ) {
+
+    result.className =
+      "warn";
+
+
+    const time =
+      formatTime(
+        data.time ||
+        data.checkedInAt ||
+        data.timestamp
+      );
+
+
+    result.innerHTML = `
+
+      <div class="badge warnbadge">
+        ✓
+      </div>
+
+      <div class="status-line">
+        Already Checked In
+      </div>
+
+      <div class="guestName">
+        ${escapeHtml(name)}
+      </div>
+
+      <p class="detail">
+        ${
+          time
+            ? "Checked in at " +
+              escapeHtml(time)
+            : "This guest has already been checked in."
+        }
+      </p>
+
+    `;
+
+
+    return;
+  }
+
+
+  if (
+    status === "not_attending"
+  ) {
+
+    result.className =
+      "err";
+
+
+    result.innerHTML = `
+
+      <div class="badge cross">
+        ✕
+      </div>
+
+      <div class="status-line">
+        Not Attending
+      </div>
+
+      <div class="guestName">
+        ${escapeHtml(name)}
+      </div>
+
+      <p class="detail">
+        This guest RSVP'd as not attending.
+      </p>
+
+    `;
+
+
+    return;
+  }
+
+
+  if (
+    status === "not_found"
+  ) {
+
+    result.className =
+      "err";
+
+
+    result.innerHTML = `
+
+      <div class="badge cross">
+        ✕
+      </div>
+
+      <div class="status-line">
+        Not Found
+      </div>
+
+      <div class="guestName">
+        No matching guest
+      </div>
+
+      <p class="detail">
+        Check the QR code or manually enter the Guest ID.
+      </p>
+
+    `;
+
+
+    return;
+  }
+
+
+  result.className =
+    "error";
+
+
+  result.innerHTML = `
+
+    <div class="badge cross">
+      ✕
+    </div>
+
+    <div class="status-line">
+      Error
+    </div>
+
+    <div class="guestName">
+      Couldn't Check In
+    </div>
+
+    <p class="detail">
+      ${escapeHtml(
+        data?.message ||
+        "Please check your connection and try again."
+      )}
+    </p>
+
+  `;
+}
+
+
+/* =========================================================
+   TIME
+   ========================================================= */
+
+function formatTime(
+  value
+) {
+
+  if (!value) {
+
+    return "";
+  }
+
+
+  try {
+
+    return new Date(
+      value
+    ).toLocaleTimeString(
+      [],
+      {
+        hour: "2-digit",
+        minute: "2-digit"
+      }
+    );
+
+  } catch (error) {
+
+    return String(value);
+  }
+}
+
+
+/* =========================================================
+   COUNTER
+   ========================================================= */
+
+async function refreshCounter() {
+
+  try {
+
+    const data =
+      await apiGet(
+        "stats"
+      );
+
+
+    $("checkedInCount")
+      .textContent =
+      Number(
+        data.checkedIn || 0
+      );
+
+
+    $("attendingCount")
+      .textContent =
+      Number(
+        data.attending || 0
+      );
+
+  } catch (error) {
+
+    console.warn(
+      "Stats error:",
+      error
+    );
+  }
+}
+
+
+/* Refresh every 15 seconds */
+
+setInterval(
+  refreshCounter,
+  15000
+);
+
+
+/* =========================================================
+   MANUAL CHECK-IN
+   ========================================================= */
+
+$("manualBtn")
+.addEventListener(
+  "click",
+  () => {
+
+    const value =
+      $("manualId")
+        .value
+        .trim();
+
+
+    if (!value) {
+
+      showToast(
+        "Enter a Guest ID."
+      );
+
+      return;
+    }
+
+
+    $("manualId").value = "";
+
+
+    checkIn(value);
+  }
+);
+
+
+$("manualId")
+.addEventListener(
+  "keydown",
+  event => {
+
+    if (
+      event.key === "Enter"
+    ) {
+
+      event.preventDefault();
+
+      $("manualBtn").click();
+    }
+  }
+);
+
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+
+let allGuests = [];
+
+let adminInitialized = false;
+
+
+async function initAdmin() {
+
+  if (
+    adminInitialized
+  ) {
+
+    return;
+  }
+
+
+  adminInitialized = true;
+
+
+  await loadStats();
+
+  await loadGuestList();
+
+
+  $("admRefresh")
+    .addEventListener(
+      "click",
+      refreshAdmin
+    );
+
+
+  $("admRefresh2")
+    .addEventListener(
+      "click",
+      refreshAdmin
+    );
+
+
+  $("admSearch")
+    .addEventListener(
+      "input",
+      renderTable
+    );
+}
+
+
+/* =========================================================
+   ADMIN REFRESH
+   ========================================================= */
+
+async function refreshAdmin() {
+
+  await loadStats();
+
+  await loadGuestList();
+
+  showToast(
+    "Guest database refreshed."
+  );
+}
+
+
+/* =========================================================
+   ADMIN STATS
+   ========================================================= */
+
+async function loadStats() {
+
+  try {
+
+    const data =
+      await apiGet(
+        "stats"
+      );
+
+
+    $("admAttending")
+      .textContent =
+      Number(
+        data.attending || 0
+      );
+
+
+    $("admDeclined")
+      .textContent =
+      Number(
+        data.declined || 0
+      );
+
+
+    $("admGuests")
+      .textContent =
+      Number(
+        data.totalGuests ||
+        data.total ||
+        0
+      );
+
+
+    $("admCheckedIn")
+      .textContent =
+      Number(
+        data.checkedIn || 0
+      );
+
+  } catch (error) {
+
+    console.error(
+      "Admin stats error:",
+      error
+    );
+
+    showToast(
+      "Couldn't load statistics."
+    );
+  }
+}
+
+
+/* =========================================================
+   LOAD GUEST LIST
+   ========================================================= */
+
+async function loadGuestList() {
+
+  try {
+
+    const data =
+      await apiGet(
+        "list"
+      );
+
+
+    /*
+     * Support several possible
+     * Apps Script response shapes.
+     */
+
+    if (
+      Array.isArray(data)
+    ) {
+
+      allGuests = data;
+
+    } else if (
+      Array.isArray(data.guests)
+    ) {
+
+      allGuests =
+        data.guests;
+
+    } else if (
+      Array.isArray(data.data)
+    ) {
+
+      allGuests =
+        data.data;
+
+    } else {
+
+      allGuests = [];
+    }
+
+
+    renderTable();
+
+  } catch (error) {
+
+    console.error(
+      "Guest list error:",
+      error
+    );
+
+
+    allGuests = [];
+
+    renderTable();
+
+
+    showToast(
+      "Couldn't load guest list."
+    );
+  }
+}
+
+
+/* =========================================================
+   NORMALIZE GUEST
+   ========================================================= */
+
+function normalizeGuest(
+  guest
+) {
+
+  return {
+
+    guestId:
+      guest.guestId ||
+      guest.id ||
+      guest.GuestID ||
+      "",
+
+    name:
+      guest.name ||
+      guest.Name ||
+      "",
+
+    email:
+      guest.email ||
+      guest.Email ||
+      "",
+
+    attending:
+      String(
+        guest.attending ??
+        guest.Attending ??
+        ""
+      ).toLowerCase(),
+
+    plusOne:
+      guest.plusOne ??
+      guest.PlusOne ??
+      false,
+
+    plusOneCount:
+      Number(
+        guest.plusOneCount ??
+        guest.PlusOneCount ??
+        (
+          guest.plusOne
+            ? 1
+            : 0
+        )
+      ),
+
+    partySize:
+      Number(
+        guest.partySize ??
+        guest.PartySize ??
+        (
+          guest.plusOne
+            ? 2
+            : 1
+        )
+      ),
+
+    checkedIn:
+      guest.checkedIn ??
+      guest.CheckedIn ??
+      false,
+
+    checkedInAt:
+      guest.checkedInAt ||
+      guest.CheckedInAt ||
+      guest.time ||
+      "",
+
+    dietary:
+      guest.dietary ||
+      guest.Dietary ||
+      "",
+
+    plusOneName:
+      guest.plusOneName ||
+      guest.PlusOneName ||
+      ""
+
+  };
+}
+
+
+/* =========================================================
+   RENDER ADMIN TABLE
+   ========================================================= */
+
+function renderTable() {
+
+  const body =
+    $("admTableBody");
+
+
+  const empty =
+    $("admEmptyNote");
+
+
+  const search =
+    String(
+      $("admSearch")
+        .value || ""
+    )
+    .trim()
+    .toLowerCase();
+
+
+  const guests =
+    allGuests
+      .map(
+        normalizeGuest
+      )
+      .filter(
+        guest => {
+
+          if (!search) {
+
+            return true;
+          }
+
+
+          return [
+
+            guest.name,
+
+            guest.email,
+
+            guest.guestId
+
+          ]
+          .join(" ")
+          .toLowerCase()
+          .includes(search);
+        }
+      );
+
+
+  body.innerHTML = "";
+
+
+  if (!guests.length) {
+
+    empty.classList.remove(
+      "hidden"
+    );
+
+    return;
+  }
+
+
+  empty.classList.add(
+    "hidden"
+  );
+
+
+  guests.forEach(
+    guest => {
+
+      const tr =
+        document.createElement(
+          "tr"
+        );
+
+
+      const attending =
+        guest.attending ===
+        "yes" ||
+        guest.attending ===
+        "true";
+
+
+      const rsvpBadge =
+        attending
+
+          ? `<span class="badge-small badge-attending">Attending</span>`
+
+          : `<span class="badge-small badge-declined">Declined</span>`;
+
+
+      const party =
+        guest.partySize ||
+        (
+          attending
+            ? 1
+            : 0
+        );
+
+
+      const checkin =
+        guest.checkedIn
+
+          ? `<span class="badge-small badge-attending">✓ Checked In</span>
+             ${
+               guest.checkedInAt
+                 ? `<br><small>${escapeHtml(
+                     formatTime(
+                       guest.checkedInAt
+                     )
+                   )}</small>`
+                 : ""
+             }`
+
+          : "—";
+
+
+      tr.innerHTML = `
+
+        <td>
+
+          <strong>
+            ${escapeHtml(
+              guest.name ||
+              "Unnamed Guest"
+            )}
+          </strong>
+
+          <br>
+
+          <small>
+            ${escapeHtml(
+              guest.guestId
+            )}
+          </small>
+
+        </td>
+
+
+        <td>
+          ${escapeHtml(
+            guest.email ||
+            "—"
+          )}
+        </td>
+
+
+        <td>
+          ${rsvpBadge}
+        </td>
+
+
+        <td>
+
+          ${escapeHtml(
+            String(party)
+          )}
+
+          ${
+            guest.plusOneName
+              ? `<br><small>+1: ${escapeHtml(
+                  guest.plusOneName
+                )}</small>`
+              : ""
+          }
+
+        </td>
+
+
+        <td>
+          ${checkin}
+        </td>
+
+
+        <td>
+
+          ${
+            attending &&
+            guest.email
+
+              ? `
+
+                <button
+                  class="payment-btn"
+                  data-payment-id="${escapeHtml(
+                    guest.guestId
+                  )}"
+                  type="button"
+                >
+                  Send Payment Details
+                </button>
+
+                <div
+                  class="payment-status"
+                  id="payment-status-${escapeHtml(
+                    guest.guestId
+                  )}"
+                ></div>
+
+              `
+
+              : "—"
+          }
+
+        </td>
+
+      `;
+
+
+      body.appendChild(
+        tr
+      );
+    }
+  );
+
+
+  /*
+   * Attach payment listeners
+   */
+
+  body
+    .querySelectorAll(
+      "[data-payment-id]"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            sendPaymentDetails(
+              button.dataset.paymentId,
+              button
+            );
+          }
+        );
+      }
+    );
+}
+
+
+/* =========================================================
+   PAYMENT DETAILS
+   ========================================================= */
+
+async function sendPaymentDetails(
+  guestId,
+  button
+) {
+
+  const status =
+    document.getElementById(
+      "payment-status-" +
+      guestId
+    );
+
+
+  if (
+    !guestId ||
+    !status
+  ) {
+
+    return;
+  }
+
+
+  button.disabled = true;
+
+
+  button.textContent =
+    "Sending…";
+
+
+  status.textContent =
+    "Sending payment details…";
+
+
+  status.className =
+    "payment-status sending";
+
+
+  try {
+
+    /*
+     * This calls:
+     *
+     * ?action=sendPayment&id=BP-XXXXXX
+     */
+
+    const data =
+      await apiGet(
+        "sendPayment",
+        {
+          id: guestId
+        }
+      );
+
+
+    if (
+      data.status !==
+        "success"
+    ) {
+
+      throw new Error(
+        data.message ||
+        "Payment email failed."
+      );
+    }
+
+
+    const email =
+      data.email ||
+      data.to ||
+      "";
+
+
+    status.textContent =
+      email
+
+        ? `✓ Sent to ${email}`
+
+        : "✓ Sent to guest";
+
+
+    status.className =
+      "payment-status success";
+
+
+    button.textContent =
+      "Sent";
+
+
+  } catch (error) {
+
+    console.error(
+      "Payment email error:",
+      error
+    );
+
+
+    status.textContent =
+      "✕ Couldn't send — try again.";
+
+
+    status.className =
+      "payment-status error";
+
+
+    button.textContent =
+      "Send Payment Details";
+
+  } finally {
+
+    button.disabled =
+      false;
+  }
+}
+
+
+/* =========================================================
+   START
+   ========================================================= */
+
+boot();
+
+})();
+</script>
+
+</body>
+</html>
