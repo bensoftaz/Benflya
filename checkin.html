@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport"
-content="width=device-width, initial-scale=1, viewport-fit=cover">
+      content="width=device-width, initial-scale=1, viewport-fit=cover">
 
 <title>Wedding Check-In — Benson & Precious</title>
 
@@ -12,3160 +12,785 @@ content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 "use strict";
 
-/* =========================================================
-GOOGLE APPS SCRIPT
-========================================================= */
-
 const API_URL =
 "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
 
-/* =========================================================
-LOGIN
-
-IMPORTANT:
-These credentials are only a front-end access gate.
-They are NOT real server-side security.
-
-For a wedding usher page this is acceptable as a basic
-access barrier, but anyone who can inspect the HTML can
-technically see these values.
-========================================================= */
-
 const CREDENTIALS = {
-
-EventsC01: {
-password: "Bernadette",
-role: "scanner",
-label: "Usher C01"
-},
-
-EventsC02: {
-password: "Memory",
-role: "scanner",
-label: "Usher C02"
-},
-
-Admin: {
-password: "Admin",
-role: "admin",
-label: "Administrator"
-}
-
+  EventsC01: { password: "Bernadette", role: "scanner", label: "Usher C01" },
+  EventsC02: { password: "Memory", role: "scanner", label: "Usher C02" },
+  Admin: { password: "Admin", role: "admin", label: "Administrator" }
 };
-
-/* =========================================================
-CONFIG
-========================================================= */
 
 const SESSION_KEY = "bp_checkin_session";
 
 const SCANNER_CONFIG = {
-fps: 10,
-qrbox: 250,
-cooldownMs: 2200
+  fps: 10,
+  qrbox: 250,
+  cooldownMs: 2200
 };
-
 </script>
 
-<!-- QR SCANNER -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <style>
-
-/* =========================================================
-ROOT
-========================================================= */
-
 :root {
---burgundy-950: #2c0a15;
---burgundy-900: #3b0f1d;
---burgundy-800: #5c1229;
-
---rose: #d7a3b3;
---rose-light: #efd6df;
-
---gold: #c9a24b;
---gold-light: #e2c778;
-
---cream: #fdf9f6;
---ink: #220812;
-
---green: #238636;
---green-bg: #e9f7ec;
-
---yellow: #9a6700;
---yellow-bg: #fff8dc;
-
---red: #c62828;
---red-bg: #ffeded;
-
---border: #e4d9dd;
-
---shadow:
-0 12px 40px rgba(0,0,0,.18);
+  --burgundy-950: #2c0a15;
+  --burgundy-900: #3b0f1d;
+  --burgundy-800: #5c1229;
+  --rose: #d7a3b3;
+  --rose-light: #efd6df;
+  --gold: #c9a24b;
+  --gold-light: #e2c778;
+  --cream: #fdf9f6;
+  --ink: #220812;
+  --green: #238636;
+  --green-bg: #e9f7ec;
+  --yellow: #9a6700;
+  --yellow-bg: #fff8dc;
+  --red: #c62828;
+  --red-bg: #ffeded;
+  --border: #e4d9dd;
+  --shadow: 0 12px 40px rgba(0,0,0,.18);
 }
-
-/* =========================================================
-RESET
-========================================================= */
-
-* {
-box-sizing: border-box;
-}
-
-html {
-width: 100%;
-max-width: 100%;
-overflow-x: hidden;
-}
-
+* { box-sizing: border-box; }
+html { width: 100%; max-width: 100%; overflow-x: hidden; }
 body {
-margin: 0;
-width: 100%;
-max-width: 100%;
-min-height: 100vh;
-
-font-family:
-system-ui,
--apple-system,
-BlinkMacSystemFont,
-"Segoe UI",
-sans-serif;
-
-background: var(--burgundy-950);
-color: var(--cream);
-
-overflow-x: hidden;
+  margin: 0; width: 100%; max-width: 100%; min-height: 100vh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--burgundy-950); color: var(--cream); overflow-x: hidden;
 }
-
-button,
-input {
-font: inherit;
-}
-
-button {
-cursor: pointer;
-}
-
-.hidden {
-display: none !important;
-}
-
-/* =========================================================
-LOGIN
-========================================================= */
+button, input { font: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
 
 #loginScreen {
-
-width: 100%;
-min-height: 100vh;
-
-display: flex;
-justify-content: center;
-align-items: center;
-
-padding:
-max(20px, env(safe-area-inset-top))
-18px
-max(20px, env(safe-area-inset-bottom))
-18px;
-
-background:
-radial-gradient(
-circle at top,
-rgba(201,162,75,.13),
-transparent 40%
-),
-var(--burgundy-950);
-}
-
-.login-card {
-
-width: 100%;
-max-width: 420px;
-
-background: var(--cream);
-color: var(--ink);
-
-border-radius: 18px;
-
-padding: 30px 24px;
-
-box-shadow: var(--shadow);
-}
-
-.monogram {
-
-width: 64px;
-height: 64px;
-
-margin: 0 auto 18px;
-
-display: flex;
-align-items: center;
-justify-content: center;
-
-border: 1px solid var(--gold);
-border-radius: 50%;
-
-color: var(--burgundy-800);
-
-font-family: Georgia, serif;
-font-size: 22px;
-}
-
-.login-card h1 {
-
-margin: 0;
-
-text-align: center;
-
-color: var(--burgundy-900);
-
-font-family: Georgia, serif;
-font-size: 27px;
-}
-
-.login-subtitle {
-
-margin: 8px 0 25px;
-
-text-align: center;
-
-color: #75656a;
-
-font-size: 14px;
-}
-
-.field {
-
-margin-bottom: 16px;
-}
-
-.field label {
-
-display: block;
-
-margin-bottom: 7px;
-
-color: var(--burgundy-800);
-
-font-size: 13px;
-font-weight: 700;
-}
-
-.field input {
-
-width: 100%;
-min-height: 50px;
-
-padding: 12px 14px;
-
-border: 1px solid var(--border);
-border-radius: 10px;
-
-background: #fff;
-
-color: var(--ink);
-
-outline: none;
-}
-
-.field input:focus {
-
-border-color: var(--gold);
-
-box-shadow:
-0 0 0 3px rgba(201,162,75,.15);
-}
-
-.primary-btn {
-
-width: 100%;
-min-height: 52px;
-
-border: 0;
-border-radius: 10px;
-
-background: var(--burgundy-800);
-color: #fff;
-
-font-weight: 800;
-}
-
-.primary-btn:disabled {
-
-opacity: .55;
-cursor: not-allowed;
-}
-
-.login-error {
-
-display: none;
-
-margin-top: 12px;
-
-padding: 11px;
-
-border-radius: 8px;
-
-background: var(--red-bg);
-color: var(--red);
-
-text-align: center;
-
-font-size: 13px;
-}
-
-/* =========================================================
-APP
-========================================================= */
-
-.app {
-
-width: 100%;
-min-height: 100vh;
-
-padding:
-20px
-16px
-max(30px, env(safe-area-inset-bottom))
-16px;
-}
-
-.app-header {
-
-width: 100%;
-max-width: 1100px;
-
-margin: 0 auto 18px;
-
-display: flex;
-align-items: center;
-justify-content: space-between;
-
-gap: 12px;
-}
-
-.brand h1 {
-
-margin: 0;
-
-font-family: Georgia, serif;
-
-font-size: clamp(20px, 4vw, 30px);
-}
-
-.brand p {
-
-margin: 5px 0 0;
-
-color: var(--rose);
-
-font-size: 13px;
-}
-
-.header-actions {
-
-display: flex;
-gap: 8px;
-}
-
-.small-btn {
-
-min-height: 42px;
-
-padding: 9px 13px;
-
-border-radius: 9px;
-
-border: 1px solid rgba(201,162,75,.65);
-
-background: transparent;
-
-color: var(--gold-light);
-
-font-weight: 700;
-}
-
-.small-btn:hover {
-
-background: rgba(255,255,255,.07);
-}
-
-/* =========================================================
-CARDS
-========================================================= */
-
-.card {
-
-width: 100%;
-max-width: 1100px;
-
-margin: 0 auto 16px;
-
-background: var(--cream);
-color: var(--ink);
-
-border-radius: 16px;
-
-padding: 22px;
-
-box-shadow: var(--shadow);
-}
-
-.card h2 {
-
-margin: 0 0 14px;
-
-color: var(--burgundy-800);
-
-font-family: Georgia, serif;
-
-font-size: 20px;
-}
-
-/* =========================================================
-SCANNER
-========================================================= */
-
-.scanner-card {
-
-max-width: 520px;
-
-margin-left: auto;
-margin-right: auto;
-}
-
-.scanner-instruction {
-
-margin-bottom: 14px;
-
-color: #66565b;
-
-font-size: 14px;
-line-height: 1.5;
-
-text-align: center;
-}
-
-/* Camera */
-
-#reader {
-
-width: 100%;
-max-width: 100%;
-
-overflow: hidden;
-
-border-radius: 14px;
-
-background: #14060b;
-}
-
-#reader video {
-
-display: block;
-
-width: 100% !important;
-
-height: auto !important;
-
-max-width: 100%;
-
-object-fit: cover;
-}
-
-#reader img {
-
-max-width: 100%;
-}
-
-/* =========================================================
-SCAN RESULT
-========================================================= */
-
-#result {
-
-display: none;
-
-margin-top: 18px;
-
-padding: 22px 16px;
-
-border-radius: 15px;
-
-text-align: center;
-}
-
-#result.ok {
-
-background: var(--green-bg);
-
-color: var(--green);
-
-border: 1px solid #b9dfc1;
-}
-
-#result.warn {
-
-background: var(--yellow-bg);
-
-color: var(--yellow);
-
-border: 1px solid #ead68c;
-}
-
-#result.err {
-
-background: var(--red-bg);
-
-color: var(--red);
-
-border: 1px solid #efbcbc;
-}
-
-#result.error {
-
-background: var(--red-bg);
-
-color: var(--red);
-
-border: 1px solid #efbcbc;
-}
-
-.badge {
-
-width: 74px;
-height: 74px;
-
-margin: 0 auto 10px;
-
-display: flex;
-align-items: center;
-justify-content: center;
-
-border-radius: 50%;
-
-font-size: 38px;
-font-weight: 900;
-}
-
-.badge.tick {
-
-background: var(--green);
-color: #fff;
-}
-
-.badge.warnbadge {
-
-background: #d6a500;
-color: #fff;
-}
-
-.badge.cross {
-
-background: var(--red);
-color: #fff;
-}
-
-.status-line {
-
-font-size: 14px;
-
-font-weight: 800;
-
-text-transform: uppercase;
-
-letter-spacing: .08em;
-}
-
-.guestName {
-
-margin-top: 5px;
-
-font-family: Georgia, serif;
-
-font-size: clamp(25px, 7vw, 38px);
-
-font-weight: 700;
-
-overflow-wrap: anywhere;
-}
-
-.detail {
-
-margin: 9px 0 0;
-
-font-size: 14px;
-
-line-height: 1.5;
-
-overflow-wrap: anywhere;
-}
-
-/* =========================================================
-MANUAL ENTRY
-========================================================= */
-
-.manual {
-
-margin-top: 18px;
-
-padding-top: 18px;
-
-border-top: 1px solid #eee;
-}
-
-.manual label {
-
-display: block;
-
-margin-bottom: 7px;
-
-color: var(--burgundy-800);
-
-font-size: 13px;
-font-weight: 700;
-}
-
-.manual-row {
-
-display: flex;
-
-gap: 8px;
-}
-
-.manual-row input {
-
-flex: 1;
-
-min-width: 0;
-
-min-height: 50px;
-
-padding: 12px;
-
-border: 1px solid var(--border);
-
-border-radius: 9px;
-
-text-transform: uppercase;
-}
-
-.manual-row button {
-
-flex: 0 0 100px;
-
-min-height: 50px;
-
-border: 0;
-
-border-radius: 9px;
-
-background: var(--burgundy-800);
-
-color: #fff;
-
-font-weight: 800;
-}
-
-/* =========================================================
-COUNTER
-========================================================= */
-
-.counter {
-
-max-width: 520px;
-
-margin: 16px auto 0;
-
-display: grid;
-
-grid-template-columns: 1fr 1fr;
-
-gap: 10px;
-}
-
-.counter-box {
-
-padding: 14px;
-
-border-radius: 10px;
-
-background: #f5eef0;
-
-text-align: center;
-}
-
-.counter-number {
-
-color: var(--burgundy-800);
-
-font-size: 27px;
-
-font-weight: 900;
-}
-
-.counter-label {
-
-margin-top: 2px;
-
-color: #75656a;
-
-font-size: 11px;
-
-text-transform: uppercase;
-
-letter-spacing: .08em;
-}
-
-/* =========================================================
-ADMIN
-========================================================= */
-
-.admin-container {
-
-width: 100%;
-max-width: 1100px;
-
-margin: 0 auto;
-}
-
-.stat-grid {
-
-display: grid;
-
-grid-template-columns:
-repeat(5, minmax(0, 1fr));
-
-gap: 12px;
-
-margin-bottom: 16px;
-}
-
-.stat-box {
-
-padding: 18px;
-
-background: var(--cream);
-
-color: var(--ink);
-
-border-radius: 13px;
-
-text-align: center;
-
-box-shadow: var(--shadow);
-}
-
-.stat-box .n {
-
-color: var(--burgundy-800);
-
-font-size: 30px;
-
-font-weight: 900;
-}
-
-.stat-box .l {
-
-margin-top: 3px;
-
-color: #75656a;
-
-font-size: 11px;
-
-text-transform: uppercase;
-
-letter-spacing: .08em;
-}
-
-/* =========================================================
-ADMIN SEARCH
-========================================================= */
-
-.search-row {
-
-display: flex;
-
-gap: 8px;
-
-margin-bottom: 15px;
-}
-
-.search-row input {
-
-flex: 1;
-
-min-width: 0;
-
-min-height: 48px;
-
-padding: 11px 13px;
-
-border: 1px solid var(--border);
-
-border-radius: 9px;
-}
-
-.search-row button {
-
-min-width: 90px;
-
-border: 0;
-
-border-radius: 9px;
-
-background: var(--burgundy-800);
-
-color: #fff;
-
-font-weight: 800;
-}
-
-/* =========================================================
-TABLE
-========================================================= */
-
-.table-wrap {
-
-width: 100%;
-
-overflow-x: auto;
-
--webkit-overflow-scrolling: touch;
-}
-
-table {
-
-width: 100%;
-
-min-width: 720px;
-
-border-collapse: collapse;
-}
-
-th,
-td {
-
-padding: 12px 10px;
-
-border-bottom: 1px solid #eee;
-
-text-align: left;
-
-vertical-align: middle;
-
-font-size: 13px;
-}
-
-th {
-
-background: #f8f1f3;
-
-color: var(--burgundy-800);
-
-font-size: 11px;
-
-text-transform: uppercase;
-
-letter-spacing: .06em;
-}
-
-/* =========================================================
-PAYMENT BUTTON
-========================================================= */
-
-.payment-btn {
-
-min-height: 38px;
-
-padding: 7px 10px;
-
-border: 0;
-
-border-radius: 7px;
-
-background: var(--burgundy-800);
-
-color: #fff;
-
-font-size: 12px;
-
-font-weight: 800;
-}
-
-.payment-btn:disabled {
-
-opacity: .55;
-
-cursor: wait;
-}
-
-.payment-status {
-
-margin-top: 6px;
-
-font-size: 11px;
-
-font-weight: 700;
-}
-
-.payment-status.success {
-
-color: var(--green);
-}
-
-.payment-status.error {
-
-color: var(--red);
-}
-
-.payment-status.sending {
-
-color: var(--yellow);
-}
-
-/* =========================================================
-BADGES
-========================================================= */
-
-.badge-small {
-
-display: inline-block;
-
-padding: 4px 8px;
-
-border-radius: 99px;
-
-font-size: 10px;
-
-font-weight: 800;
-}
-
-.badge-attending {
-
-background: var(--green-bg);
-
-color: var(--green);
-}
-
-.badge-declined {
-
-background: var(--red-bg);
-
-color: var(--red);
-}
-
-/* =========================================================
-EMPTY STATE
-========================================================= */
-
-.empty-note {
-
-padding: 25px;
-
-text-align: center;
-
-color: #76676b;
-}
-
-/* =========================================================
-TOAST
-========================================================= */
+  width: 100%; min-height: 100vh; display: flex; justify-content: center; align-items: center;
+  padding: max(20px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom)) 18px;
+  background: radial-gradient(circle at top, rgba(201,162,75,.13), transparent 40%), var(--burgundy-950);
+}
+.login-card { width: 100%; max-width: 420px; background: var(--cream); color: var(--ink); border-radius: 18px; padding: 30px 24px; box-shadow: var(--shadow); }
+.monogram { width: 64px; height: 64px; margin: 0 auto 18px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--gold); border-radius: 50%; color: var(--burgundy-800); font-family: Georgia, serif; font-size: 22px; }
+.login-card h1 { margin: 0; text-align: center; color: var(--burgundy-900); font-family: Georgia, serif; font-size: 27px; }
+.login-subtitle { margin: 8px 0 25px; text-align: center; color: #75656a; font-size: 14px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; margin-bottom: 7px; color: var(--burgundy-800); font-size: 13px; font-weight: 700; }
+.field input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); outline: none; }
+.field input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,162,75,.15); }
+.primary-btn { width: 100%; min-height: 52px; border: 0; border-radius: 10px; background: var(--burgundy-800); color: #fff; font-weight: 800; }
+.primary-btn:disabled { opacity: .55; cursor: not-allowed; }
+.login-error { display: none; margin-top: 12px; padding: 11px; border-radius: 8px; background: var(--red-bg); color: var(--red); text-align: center; font-size: 13px; }
+
+.app { width: 100%; min-height: 100vh; padding: 20px 16px max(30px, env(safe-area-inset-bottom)) 16px; }
+.app-header { width: 100%; max-width: 1100px; margin: 0 auto 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(20px, 4vw, 30px); }
+.brand p { margin: 5px 0 0; color: var(--rose); font-size: 13px; }
+.header-actions { display: flex; gap: 8px; }
+.small-btn { min-height: 42px; padding: 9px 13px; border-radius: 9px; border: 1px solid rgba(201,162,75,.65); background: transparent; color: var(--gold-light); font-weight: 700; }
+.small-btn:hover { background: rgba(255,255,255,.07); }
+
+.card { width: 100%; max-width: 1100px; margin: 0 auto 16px; background: var(--cream); color: var(--ink); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+.card h2 { margin: 0 0 14px; color: var(--burgundy-800); font-family: Georgia, serif; font-size: 20px; }
+
+.scanner-card { max-width: 520px; margin-left: auto; margin-right: auto; }
+.scanner-instruction { margin-bottom: 14px; color: #66565b; font-size: 14px; line-height: 1.5; text-align: center; }
+#reader { width: 100%; max-width: 100%; overflow: hidden; border-radius: 14px; background: #14060b; }
+#reader video { display: block; width: 100% !important; height: auto !important; max-width: 100%; object-fit: cover; }
+#reader img { max-width: 100%; }
+
+#result { display: none; margin-top: 18px; padding: 22px 16px; border-radius: 15px; text-align: center; }
+#result.ok { background: var(--green-bg); color: var(--green); border: 1px solid #b9dfc1; }
+#result.warn { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #ead68c; }
+#result.err { background: var(--red-bg); color: var(--red); border: 1px solid #efbcbc; }
+#result.error { background: var(--red-bg); color: var(--red); border: 1px solid #efbcbc; }
+.badge { width: 74px; height: 74px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 38px; font-weight: 900; }
+.badge.tick { background: var(--green); color: #fff; }
+.badge.warnbadge { background: #d6a500; color: #fff; }
+.badge.cross { background: var(--red); color: #fff; }
+.status-line { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.guestName { margin-top: 5px; font-family: Georgia, serif; font-size: clamp(25px, 7vw, 38px); font-weight: 700; overflow-wrap: anywhere; }
+.detail { margin: 9px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.manual { margin-top: 18px; padding-top: 18px; border-top: 1px solid #eee; }
+.manual label { display: block; margin-bottom: 7px; color: var(--burgundy-800); font-size: 13px; font-weight: 700; }
+.manual-row { display: flex; gap: 8px; }
+.manual-row input { flex: 1; min-width: 0; min-height: 50px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; text-transform: uppercase; }
+.manual-row button { flex: 0 0 100px; min-height: 50px; border: 0; border-radius: 9px; background: var(--burgundy-800); color: #fff; font-weight: 800; }
+
+.counter { max-width: 520px; margin: 16px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.counter-box { padding: 14px; border-radius: 10px; background: #f5eef0; text-align: center; }
+.counter-number { color: var(--burgundy-800); font-size: 27px; font-weight: 900; }
+.counter-label { margin-top: 2px; color: #75656a; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+
+.admin-container { width: 100%; max-width: 1100px; margin: 0 auto; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-box { padding: 18px; background: var(--cream); color: var(--ink); border-radius: 13px; text-align: center; box-shadow: var(--shadow); }
+.stat-box .n { color: var(--burgundy-800); font-size: 30px; font-weight: 900; }
+.stat-box .l { margin-top: 3px; color: #75656a; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+
+.search-row { display: flex; gap: 8px; margin-bottom: 15px; }
+.search-row input { flex: 1; min-width: 0; min-height: 48px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 9px; }
+.search-row button { min-width: 90px; border: 0; border-radius: 9px; background: var(--burgundy-800); color: #fff; font-weight: 800; }
+
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; min-width: 720px; border-collapse: collapse; }
+th, td { padding: 12px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: middle; font-size: 13px; }
+th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+.payment-btn { min-height: 38px; padding: 7px 10px; border: 0; border-radius: 7px; background: var(--burgundy-800); color: #fff; font-size: 12px; font-weight: 800; }
+.payment-btn:disabled { opacity: .55; cursor: wait; }
+.payment-status { margin-top: 6px; font-size: 11px; font-weight: 700; }
+.payment-status.success { color: var(--green); }
+.payment-status.error { color: var(--red); }
+.payment-status.sending { color: var(--yellow); }
+
+.badge-small { display: inline-block; padding: 4px 8px; border-radius: 99px; font-size: 10px; font-weight: 800; }
+.badge-attending { background: var(--green-bg); color: var(--green); }
+.badge-declined { background: var(--red-bg); color: var(--red); }
+.badge-nodetails { background: #eee; color: #777; }
+
+.empty-note { padding: 25px; text-align: center; color: #76676b; }
 
 #toast {
-
-position: fixed;
-
-left: 50%;
-
-bottom:
-max(18px, env(safe-area-inset-bottom));
-
-transform:
-translate(-50%, 20px);
-
-width: min(90vw, 420px);
-
-padding: 12px 16px;
-
-border-radius: 10px;
-
-background: #171013;
-
-color: #fff;
-
-text-align: center;
-
-font-size: 13px;
-
-font-weight: 700;
-
-opacity: 0;
-
-pointer-events: none;
-
-transition: .25s ease;
-
-z-index: 9999;
+  position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translate(-50%, 20px); width: min(90vw, 420px); padding: 12px 16px; border-radius: 10px;
+  background: #171013; color: #fff; text-align: center; font-size: 13px; font-weight: 700;
+  opacity: 0; pointer-events: none; transition: .25s ease; z-index: 9999;
 }
-
-#toast.show {
-
-opacity: 1;
-
-transform: translate(-50%, 0);
-}
-
-/* =========================================================
-MOBILE
-========================================================= */
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 700px) {
-
-.app {
-
-padding-left: 12px;
-padding-right: 12px;
-}
-
-.app-header {
-
-align-items: flex-start;
-}
-
-.header-actions {
-
-flex-direction: column;
-}
-
-.small-btn {
-
-min-height: 40px;
-}
-
-.card {
-
-padding: 18px 14px;
-
-border-radius: 13px;
-}
-
-.stat-grid {
-
-grid-template-columns: 1fr 1fr;
-}
-
-.search-row {
-
-flex-direction: column;
-}
-
-.search-row button {
-
-width: 100%;
-
-min-height: 48px;
-}
-
-.manual-row {
-
-flex-direction: column;
-}
-
-.manual-row button {
-
-width: 100%;
-
-flex-basis: auto;
-}
-
-#reader {
-
-border-radius: 10px;
-}
+  .app { padding-left: 12px; padding-right: 12px; }
+  .app-header { align-items: flex-start; }
+  .header-actions { flex-direction: column; }
+  .small-btn { min-height: 40px; }
+  .card { padding: 18px 14px; border-radius: 13px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .search-row { flex-direction: column; }
+  .search-row button { width: 100%; min-height: 48px; }
+  .manual-row { flex-direction: column; }
+  .manual-row button { width: 100%; flex-basis: auto; }
+  #reader { border-radius: 10px; }
 }
 
 @media (max-width: 420px) {
-
-.login-card {
-
-padding: 24px 16px;
+  .login-card { padding: 24px 16px; }
+  .app-header { flex-direction: column; }
+  .header-actions { width: 100%; flex-direction: row; }
+  .header-actions button { flex: 1; }
+  .stat-grid { gap: 8px; }
+  .stat-box { padding: 13px 7px; }
+  .stat-box .n { font-size: 24px; }
 }
-
-.app-header {
-
-flex-direction: column;
-}
-
-.header-actions {
-
-width: 100%;
-
-flex-direction: row;
-}
-
-.header-actions button {
-
-flex: 1;
-}
-
-.stat-grid {
-
-gap: 8px;
-}
-
-.stat-box {
-
-padding: 13px 7px;
-}
-
-.stat-box .n {
-
-font-size: 24px;
-}
-
-}
-
-/* =========================================================
-REDUCED MOTION
-========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-
-* {
-
-animation-duration: .01ms !important;
-
-transition-duration: .01ms !important;
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
-
-}
-
 </style>
 </head>
 
 <body>
 
-<!-- =======================================================
-LOGIN SCREEN
-======================================================= -->
-
 <section id="loginScreen">
-
-<div class="login-card">
-
-<div class="monogram">
-B & P
-</div>
-
-<h1>
-Wedding Check-In
-</h1>
-
-<p class="login-subtitle">
-Benson & Precious · 10 October 2026
-</p>
-
-<div class="field">
-
-<label for="loginUser">
-Username
-</label>
-
-<input
-id="loginUser"
-type="text"
-autocomplete="username"
-placeholder="Enter username"
->
-
-</div>
-
-<div class="field">
-
-<label for="loginPass">
-Password
-</label>
-
-<input
-id="loginPass"
-type="password"
-autocomplete="current-password"
-placeholder="Enter password"
->
-
-</div>
-
-<button
-id="loginBtn"
-class="primary-btn"
-type="button"
->
-Sign In
-</button>
-
-<div
-id="loginError"
-class="login-error"
-role="alert"
->
-Incorrect username or password.
-</div>
-
-</div>
-
+  <div class="login-card">
+    <div class="monogram">B &amp; P</div>
+    <h1>Wedding Check-In</h1>
+    <p class="login-subtitle">Benson &amp; Precious · 10 October 2026</p>
+    <div class="field">
+      <label for="loginUser">Username</label>
+      <input id="loginUser" type="text" autocomplete="username" placeholder="Enter username">
+    </div>
+    <div class="field">
+      <label for="loginPass">Password</label>
+      <input id="loginPass" type="password" autocomplete="current-password" placeholder="Enter password">
+    </div>
+    <button id="loginBtn" class="primary-btn" type="button">Sign In</button>
+    <div id="loginError" class="login-error" role="alert">Incorrect username or password.</div>
+  </div>
 </section>
 
-<!-- =======================================================
-USHER SCANNER
-======================================================= -->
+<section id="scannerScreen" class="app hidden">
+  <header class="app-header">
+    <div class="brand">
+      <h1>Guest Check-In</h1>
+      <p>Signed in as <strong id="scannerWho">Usher</strong></p>
+    </div>
+    <div class="header-actions">
+      <button id="scannerLogout" class="small-btn" type="button">Log Out</button>
+    </div>
+  </header>
 
-<section
-id="scannerScreen"
-class="app hidden"
->
-
-<header class="app-header">
-
-<div class="brand">
-
-<h1>
-Guest Check-In
-</h1>
-
-<p>
-Signed in as <strong id="scannerWho">Usher</strong>
-</p>
-
-</div>
-
-<div class="header-actions">
-
-<button
-id="scannerLogout"
-class="small-btn"
-type="button"
->
-Log Out
-</button>
-
-</div>
-
-</header>
-
-<main class="scanner-card card">
-
-<h2>
-Scan Guest QR
-</h2>
-
-<p class="scanner-instruction">
-Ask the guest to display their QR pass.
-Point the phone camera at the QR code.
-</p>
-
-<div id="reader"></div>
-
-<!-- RESULT -->
-
-<div
-id="result"
-role="status"
-aria-live="polite"
-></div>
-
-<!-- MANUAL -->
-
-<div class="manual">
-
-<label for="manualId">
-Manual Guest ID
-</label>
-
-<div class="manual-row">
-
-<input
-id="manualId"
-type="text"
-inputmode="text"
-autocomplete="off"
-autocapitalize="characters"
-placeholder="BP-XXXXXX"
->
-
-<button
-id="manualBtn"
-type="button"
->
-Check In
-</button>
-
-</div>
-
-</div>
-
-<!-- COUNTER -->
-
-<div class="counter">
-
-<div class="counter-box">
-
-<div
-class="counter-number"
-id="checkedInCount"
->
-0
-</div>
-
-<div class="counter-label">
-Checked In
-</div>
-
-</div>
-
-<div class="counter-box">
-
-<div
-class="counter-number"
-id="attendingCount"
->
-0
-</div>
-
-<div class="counter-label">
-Expected
-</div>
-
-</div>
-
-</div>
-
-</main>
-
+  <main class="scanner-card card">
+    <h2>Scan Guest QR</h2>
+    <p class="scanner-instruction">Ask the guest to display their QR pass. Point the phone camera at the QR code.</p>
+    <div id="reader"></div>
+    <div id="result" role="status" aria-live="polite"></div>
+    <div class="manual">
+      <label for="manualId">Manual Guest ID</label>
+      <div class="manual-row">
+        <input id="manualId" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="BP-XXXXXX">
+        <button id="manualBtn" type="button">Check In</button>
+      </div>
+    </div>
+    <div class="counter">
+      <div class="counter-box">
+        <div class="counter-number" id="checkedInCount">0</div>
+        <div class="counter-label">Checked In</div>
+      </div>
+      <div class="counter-box">
+        <div class="counter-number" id="attendingCount">0</div>
+        <div class="counter-label">Expected</div>
+      </div>
+    </div>
+  </main>
 </section>
 
-<!-- =======================================================
-ADMIN
-======================================================= -->
+<section id="adminScreen" class="app hidden">
+  <header class="app-header">
+    <div class="brand">
+      <h1>Wedding Admin</h1>
+      <p><span class="who">Administrator</span></p>
+    </div>
+    <div class="header-actions">
+      <button id="admRefresh" class="small-btn" type="button">Refresh</button>
+      <button id="adminLogout" class="small-btn" type="button">Log Out</button>
+    </div>
+  </header>
 
-<section
-id="adminScreen"
-class="app hidden"
->
+  <main class="admin-container">
+    <div class="stat-grid">
+      <div class="stat-box"><div class="n" id="admAttending">0</div><div class="l">Attending</div></div>
+      <div class="stat-box"><div class="n" id="admDeclined">0</div><div class="l">Declined</div></div>
+      <div class="stat-box"><div class="n" id="admGuests">0</div><div class="l">Total Guests</div></div>
+      <div class="stat-box"><div class="n" id="admCheckedIn">0</div><div class="l">Checked In</div></div>
+    </div>
 
-<header class="app-header">
-
-<div class="brand">
-
-<h1>
-Wedding Admin
-</h1>
-
-<p>
-<span class="who">Administrator</span>
-</p>
-
-</div>
-
-<div class="header-actions">
-
-<button
-id="admRefresh"
-class="small-btn"
-type="button"
->
-Refresh
-</button>
-
-<button
-id="adminLogout"
-class="small-btn"
-type="button"
->
-Log Out
-</button>
-
-</div>
-
-</header>
-
-<main class="admin-container">
-
-<!-- STATISTICS -->
-
-<div class="stat-grid">
-
-<div class="stat-box">
-
-<div
-class="n"
-id="admAttending"
->
-0
-</div>
-
-<div class="l">
-Attending
-</div>
-
-</div>
-
-<div class="stat-box">
-
-<div
-class="n"
-id="admDeclined"
->
-0
-</div>
-
-<div class="l">
-Declined
-</div>
-
-</div>
-
-<div class="stat-box">
-
-<div
-class="n"
-id="admGuests"
->
-0
-</div>
-
-<div class="l">
-Total Guests
-</div>
-
-</div>
-
-<div class="stat-box">
-
-<div
-class="n"
-id="admCheckedIn"
->
-0
-</div>
-
-<div class="l">
-Checked In
-</div>
-
-</div>
-
-<div class="stat-box">
-
-<div
-class="n"
-id="admPaid"
->
-0
-</div>
-
-<div class="l">
-Paid
-</div>
-
-</div>
-
-</div>
-
-<!-- GUEST LIST -->
-
-<section class="card">
-
-<h2>
-Guest List
-</h2>
-
-<div class="search-row">
-
-<input
-id="admSearch"
-type="search"
-placeholder="Search by name, email or guest ID"
-autocomplete="off"
->
-
-<button
-id="admRefresh2"
-type="button"
->
-Refresh
-</button>
-
-</div>
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>
-Guest
-</th>
-
-<th>
-Email
-</th>
-
-<th>
-RSVP
-</th>
-
-<th>
-Party
-</th>
-
-<th>
-Check-In
-</th>
-
-<th>
-Payment
-</th>
-
-</tr>
-
-</thead>
-
-<tbody id="admTableBody"></tbody>
-
-</table>
-
-<p
-id="admEmptyNote"
-class="empty-note hidden"
->
-No RSVP responses found.
-</p>
-
-</div>
-
+    <section class="card">
+      <h2>Guest List</h2>
+      <div class="search-row">
+        <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
+        <button id="admRefresh2" type="button">Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Guest</th>
+              <th>Email</th>
+              <th>RSVP</th>
+              <th>Party</th>
+              <th>Check-In</th>
+              <th>Payment</th>
+            </tr>
+          </thead>
+          <tbody id="admTableBody"></tbody>
+        </table>
+        <p id="admEmptyNote" class="empty-note hidden">No RSVP responses found.</p>
+      </div>
+    </section>
+  </main>
 </section>
 
-</main>
-
-</section>
-
-<div
-id="toast"
-role="status"
-aria-live="polite"
-></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function(){
-
 "use strict";
 
-/* =========================================================
-GENERAL HELPERS
-========================================================= */
-
-const $ = id =>
-document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 function escapeHtml(value) {
-
-return String(value ?? "")
-.replace(/&/g, "&amp;")
-.replace(/</g, "&lt;")
-.replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;")
-.replace(/'/g, "&#039;");
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function showToast(message) {
-
-const toast = $("toast");
-
-toast.textContent = message;
-
-toast.classList.add("show");
-
-clearTimeout(window.__toastTimer);
-
-window.__toastTimer =
-setTimeout(
-() => toast.classList.remove("show"),
-4000
-);
+  const toast = $("toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => toast.classList.remove("show"), 4000);
 }
 
-/* =========================================================
-API
-========================================================= */
-
 function apiUrl(action, params = {}) {
-
-const query =
-new URLSearchParams({
-action,
-...params
-});
-
-return API_URL + "?" + query.toString();
+  const query = new URLSearchParams({ action, ...params });
+  return API_URL + "?" + query.toString();
 }
 
 async function apiGet(action, params = {}) {
-
-if (!API_URL) {
-
-throw new Error("API URL is not configured.");
+  if (!API_URL) throw new Error("API URL is not configured.");
+  const response = await fetch(apiUrl(action, params), { method: "GET", cache: "no-store" });
+  if (!response.ok) throw new Error("Server returned HTTP " + response.status);
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    console.error("Invalid JSON returned by Apps Script:", text);
+    throw new Error("Invalid response from Google Apps Script.");
+  }
+  return data;
 }
-
-const response =
-await fetch(
-apiUrl(action, params),
-{
-method: "GET",
-cache: "no-store"
-}
-);
-
-if (!response.ok) {
-
-throw new Error(
-"Server returned HTTP " +
-response.status
-);
-}
-
-const text =
-await response.text();
-
-let data;
-
-try {
-
-data = JSON.parse(text);
-
-} catch (error) {
-
-console.error(
-"Invalid JSON returned by Apps Script:",
-text
-);
-
-throw new Error(
-"Invalid response from Google Apps Script."
-);
-}
-
-return data;
-}
-
-/* =========================================================
-SESSION
-========================================================= */
 
 function getSession() {
-
-try {
-
-return JSON.parse(
-sessionStorage.getItem(
-SESSION_KEY
-) || "null"
-);
-
-} catch (error) {
-
-return null;
-}
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
+  catch (error) { return null; }
 }
 
-function setSession(
-username,
-role,
-label
-) {
-
-sessionStorage.setItem(
-SESSION_KEY,
-JSON.stringify({
-username,
-role,
-label,
-loginTime: Date.now()
-})
-);
+function setSession(username, role, label) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, role, label, loginTime: Date.now() }));
 }
 
-function clearSession() {
-
-sessionStorage.removeItem(
-SESSION_KEY
-);
-}
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
 
 function showScreen(screen) {
-
-$("loginScreen")
-.classList.toggle(
-"hidden",
-screen !== "login"
-);
-
-$("scannerScreen")
-.classList.toggle(
-"hidden",
-screen !== "scanner"
-);
-
-$("adminScreen")
-.classList.toggle(
-"hidden",
-screen !== "admin"
-);
+  $("loginScreen").classList.toggle("hidden", screen !== "login");
+  $("scannerScreen").classList.toggle("hidden", screen !== "scanner");
+  $("adminScreen").classList.toggle("hidden", screen !== "admin");
 }
-
-/* =========================================================
-BOOT
-========================================================= */
 
 let scannerStarted = false;
 
 async function boot() {
-
-const session =
-getSession();
-
-if (!session) {
-
-showScreen("login");
-
-return;
+  const session = getSession();
+  if (!session) { showScreen("login"); return; }
+  if (session.role === "admin") {
+    $("adminScreen").querySelector(".who").textContent = session.label;
+    showScreen("admin");
+    await initAdmin();
+    return;
+  }
+  $("scannerWho").textContent = session.label;
+  showScreen("scanner");
+  await initScanner();
 }
 
-if (session.role === "admin") {
+$("loginBtn").addEventListener("click", login);
 
-$("adminScreen")
-.querySelector(".who")
-.textContent =
-session.label;
-
-showScreen("admin");
-
-await initAdmin();
-
-return;
-}
-
-$("scannerWho")
-.textContent =
-session.label;
-
-showScreen("scanner");
-
-await initScanner();
-}
-
-/* =========================================================
-LOGIN
-========================================================= */
-
-$("loginBtn")
-.addEventListener(
-"click",
-login
-);
-
-$("loginPass")
-.addEventListener(
-"keydown",
-event => {
-
-if (event.key === "Enter") {
-
-login();
-}
-}
-);
+$("loginPass").addEventListener("keydown", event => {
+  if (event.key === "Enter") login();
+});
 
 async function login() {
-
-const username =
-$("loginUser")
-.value
-.trim();
-
-const password =
-$("loginPass")
-.value;
-
-const match =
-Object.keys(CREDENTIALS)
-.find(
-key =>
-key.toLowerCase() ===
-username.toLowerCase()
-);
-
-const entry =
-match
-? CREDENTIALS[match]
-: null;
-
-if (
-!entry ||
-entry.password !== password
-) {
-
-$("loginError")
-.style.display = "block";
-
-return;
+  const username = $("loginUser").value.trim();
+  const password = $("loginPass").value;
+  const match = Object.keys(CREDENTIALS).find(key => key.toLowerCase() === username.toLowerCase());
+  const entry = match ? CREDENTIALS[match] : null;
+  if (!entry || entry.password !== password) {
+    $("loginError").style.display = "block";
+    return;
+  }
+  $("loginError").style.display = "none";
+  setSession(match, entry.role, entry.label);
+  $("loginUser").value = "";
+  $("loginPass").value = "";
+  await boot();
 }
 
-$("loginError")
-.style.display = "none";
+$("scannerLogout").addEventListener("click", async () => {
+  await stopScanner();
+  clearSession();
+  location.reload();
+});
 
-setSession(
-match,
-entry.role,
-entry.label
-);
-
-$("loginUser").value = ""; $("loginPass").value = "";
-
-await boot();
-}
-
-/* =========================================================
-LOGOUT
-========================================================= */
-
-$("scannerLogout")
-.addEventListener(
-"click",
-async () => {
-
-await stopScanner();
-
-clearSession();
-
-location.reload();
-}
-);
-
-$("adminLogout")
-.addEventListener(
-"click",
-() => {
-
-clearSession();
-
-location.reload();
-}
-);
-
-/* =========================================================
-SCANNER
-========================================================= */
+$("adminLogout").addEventListener("click", () => {
+  clearSession();
+  location.reload();
+});
 
 let html5Scanner = null;
-
 let scannerBusy = false;
-
 let lastScannedId = "";
-
 let lastScanTime = 0;
 
 async function initScanner() {
-
-if (scannerStarted) {
-
-return;
-}
-
-scannerStarted = true;
-
-await refreshCounter();
-
-if (!window.Html5Qrcode) {
-
-showScannerError(
-"QR scanner library could not load. Use manual entry below."
-);
-
-return;
-}
-
-html5Scanner =
-new Html5Qrcode(
-"reader"
-);
-
-try {
-
-const cameras =
-await Html5Qrcode
-.getCameras();
-
-if (
-!cameras ||
-!cameras.length
-) {
-
-throw new Error(
-"No camera found."
-);
-}
-
-let camera =
-cameras.find(
-item =>
-/back|rear|environment/i
-.test(item.label)
-);
-
-if (!camera) {
-
-camera =
-cameras[
-cameras.length - 1
-];
-}
-
-await html5Scanner.start(
-
-camera.id,
-
-{
-fps:
-SCANNER_CONFIG.fps,
-
-qrbox:
-{
-width: 250,
-height: 250
-},
-
-aspectRatio: 1
-},
-
-decodedText => {
-
-handleScan(
-decodedText
-);
-},
-
-() => {}
-
-);
-
-} catch (error) {
-
-console.error(
-"Camera error:",
-error
-);
-
-showScannerError(
-"Camera unavailable. Allow camera permission or use manual entry below."
-);
-}
+  if (scannerStarted) return;
+  scannerStarted = true;
+  await refreshCounter();
+  if (!window.Html5Qrcode) {
+    showScannerError("QR scanner library could not load. Use manual entry below.");
+    return;
+  }
+  html5Scanner = new Html5Qrcode("reader");
+  try {
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras || !cameras.length) throw new Error("No camera found.");
+    let camera = cameras.find(item => /back|rear|environment/i.test(item.label));
+    if (!camera) camera = cameras[cameras.length - 1];
+    await html5Scanner.start(
+      camera.id,
+      { fps: SCANNER_CONFIG.fps, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
+      decodedText => { handleScan(decodedText); },
+      () => {}
+    );
+  } catch (error) {
+    console.error("Camera error:", error);
+    showScannerError("Camera unavailable. Allow camera permission or use manual entry below.");
+  }
 }
 
 function showScannerError(message) {
-
-$("reader").innerHTML = `<div style="
-padding:24px;
-color:#efd6df;
-text-align:center;
-line-height:1.5;
-">
-${escapeHtml(message)} </div>`;
+  $("reader").innerHTML = `<div style="padding:24px;color:#efd6df;text-align:center;line-height:1.5;">${escapeHtml(message)}</div>`;
 }
-
-/* =========================================================
-STOP SCANNER
-========================================================= */
 
 async function stopScanner() {
-
-if (!html5Scanner) {
-
-return;
+  if (!html5Scanner) return;
+  try { await html5Scanner.stop(); } catch (error) { console.warn("Scanner stop:", error); }
+  try { await html5Scanner.clear(); } catch (error) { console.warn("Scanner clear:", error); }
+  html5Scanner = null;
+  scannerStarted = false;
 }
-
-try {
-
-await html5Scanner.stop();
-
-} catch (error) {
-
-console.warn(
-"Scanner stop:",
-error
-);
-}
-
-try {
-
-await html5Scanner.clear();
-
-} catch (error) {
-
-console.warn(
-"Scanner clear:",
-error
-);
-}
-
-html5Scanner = null;
-
-scannerStarted = false;
-}
-
-/* =========================================================
-SCAN HANDLER
-========================================================= */
 
 function normalizeGuestId(value) {
-
-let id =
-String(value || "")
-.trim()
-.toUpperCase();
-
-/*
-QR may contain a full URL.
-
-Example:
-
-https://benflya.online/checkin.html?id=BP-ABC123
-*/
-
-try {
-
-const url =
-new URL(id);
-
-const fromUrl =
-url.searchParams.get("id") ||
-url.searchParams.get("guestId");
-
-if (fromUrl) {
-
-id =
-fromUrl
-.trim()
-.toUpperCase();
-}
-
-} catch (error) {
-
-/* Not a URL — that's fine. */
-}
-
-/*
-Also support QR values such as:
-
-BP-ABC123
-guestId=BP-ABC123
-*/
-
-const match =
-id.match(
-/(BP-[A-Z0-9]+)/i
-);
-
-if (match) {
-
-return match[1]
-.toUpperCase();
-}
-
-return id;
+  let id = String(value || "").trim().toUpperCase();
+  try {
+    const url = new URL(id);
+    const fromUrl = url.searchParams.get("id") || url.searchParams.get("guestId");
+    if (fromUrl) id = fromUrl.trim().toUpperCase();
+  } catch (error) { /* Not a URL — that's fine. */ }
+  const match = id.match(/(BP-[A-Z0-9]+)/i);
+  if (match) return match[1].toUpperCase();
+  return id;
 }
 
 function handleScan(decodedText) {
-
-const guestId =
-normalizeGuestId(
-decodedText
-);
-
-if (!guestId) {
-
-return;
+  const guestId = normalizeGuestId(decodedText);
+  if (!guestId) return;
+  const now = Date.now();
+  if (guestId === lastScannedId && now - lastScanTime < SCANNER_CONFIG.cooldownMs) return;
+  lastScannedId = guestId;
+  lastScanTime = now;
+  checkIn(guestId);
 }
 
-const now =
-Date.now();
-
-/*
-Prevent the same QR from being
-submitted repeatedly while the
-camera is still seeing it.
-*/
-
-if (
-guestId === lastScannedId &&
-now - lastScanTime <
-SCANNER_CONFIG.cooldownMs
-) {
-
-return;
+async function checkIn(guestId) {
+  if (scannerBusy || !guestId) return;
+  scannerBusy = true;
+  guestId = normalizeGuestId(guestId);
+  showLoadingResult(guestId);
+  try {
+    const data = await apiGet("checkin", { id: guestId });
+    console.log("Check-in response:", data);
+    renderResult(data);
+    await refreshCounter();
+  } catch (error) {
+    console.error("Check-in error:", error);
+    renderResult({ status: "error", message: "Unable to contact the RSVP database." });
+  } finally {
+    setTimeout(() => { scannerBusy = false; }, SCANNER_CONFIG.cooldownMs);
+  }
 }
 
-lastScannedId = guestId;
-
-lastScanTime = now;
-
-checkIn(guestId);
+function showLoadingResult(guestId) {
+  const result = $("result");
+  result.style.display = "block";
+  result.className = "warn";
+  result.innerHTML = `
+    <div class="badge warnbadge">…</div>
+    <div class="status-line">Checking</div>
+    <div class="guestName">${escapeHtml(guestId)}</div>
+    <p class="detail">Looking up guest details…</p>
+  `;
 }
 
-/* =========================================================
-CHECK-IN
-========================================================= */
+function renderResult(data) {
+  const result = $("result");
+  const status = String(data?.status || "").toLowerCase();
+  const name = data?.name || data?.guestName || "Guest";
 
-async function checkIn(
-guestId
-) {
+  if (status === "ok" || status === "success") {
+    result.className = "ok";
+    let party = data.partySize;
+    if (party === undefined || party === null || party === "") party = data.plusOne ? 2 : 1;
+    let detail = `Party of ${escapeHtml(party)}`;
+    if (data.plusOneName) detail += ` · +1: ${escapeHtml(data.plusOneName)}`;
+    if (data.dietary) detail += ` · Dietary: ${escapeHtml(data.dietary)}`;
+    result.innerHTML = `
+      <div class="badge tick">✓</div>
+      <div class="status-line">Checked In</div>
+      <div class="guestName">${escapeHtml(name)}</div>
+      <p class="detail">${detail}</p>
+    `;
+    return;
+  }
 
-if (
-scannerBusy ||
-!guestId
-) {
+  if (status === "already") {
+    result.className = "warn";
+    const time = formatTime(data.time || data.checkedInAt || data.timestamp);
+    result.innerHTML = `
+      <div class="badge warnbadge">✓</div>
+      <div class="status-line">Already Checked In</div>
+      <div class="guestName">${escapeHtml(name)}</div>
+      <p class="detail">${time ? "Checked in at " + escapeHtml(time) : "This guest has already been checked in."}</p>
+    `;
+    return;
+  }
 
-return;
+  if (status === "not_attending") {
+    result.className = "err";
+    result.innerHTML = `
+      <div class="badge cross">✕</div>
+      <div class="status-line">Not Attending</div>
+      <div class="guestName">${escapeHtml(name)}</div>
+      <p class="detail">This guest RSVP'd as not attending.</p>
+    `;
+    return;
+  }
+
+  if (status === "not_found") {
+    result.className = "err";
+    result.innerHTML = `
+      <div class="badge cross">✕</div>
+      <div class="status-line">Not Found</div>
+      <div class="guestName">No matching guest</div>
+      <p class="detail">Check the QR code or manually enter the Guest ID.</p>
+    `;
+    return;
+  }
+
+  result.className = "error";
+  result.innerHTML = `
+    <div class="badge cross">✕</div>
+    <div class="status-line">Error</div>
+    <div class="guestName">Couldn't Check In</div>
+    <p class="detail">${escapeHtml(data?.message || "Please check your connection and try again.")}</p>
+  `;
 }
 
-scannerBusy = true;
-
-guestId =
-normalizeGuestId(
-guestId
-);
-
-showLoadingResult(
-guestId
-);
-
-try {
-
-/*
-* This calls the Apps Script
-* endpoint:
-*
-* ?action=checkin&id=BP-XXXXXX
-*/
-
-const data =
-await apiGet(
-"checkin",
-{
-id: guestId
+function formatTime(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch (error) {
+    return String(value);
+  }
 }
-);
-
-console.log(
-"Check-in response:",
-data
-);
-
-renderResult(
-data
-);
-
-await refreshCounter();
-
-} catch (error) {
-
-console.error(
-"Check-in error:",
-error
-);
-
-renderResult({
-status: "error",
-message:
-"Unable to contact the RSVP database."
-});
-
-} finally {
-
-setTimeout(
-() => {
-scannerBusy = false;
-},
-SCANNER_CONFIG.cooldownMs
-);
-}
-}
-
-/* =========================================================
-RESULT LOADING
-========================================================= */
-
-function showLoadingResult(
-guestId
-) {
-
-const result =
-$("result");
-
-result.style.display =
-"block";
-
-result.className =
-"warn";
-
-result.innerHTML = `
-
-<div class="badge warnbadge">
-…
-</div>
-
-<div class="status-line">
-Checking
-</div>
-
-<div class="guestName">
-${escapeHtml(guestId)}
-</div>
-
-<p class="detail">
-Looking up guest details…
-</p>
-
-`;
-}
-
-/* =========================================================
-RESULT DISPLAY
-========================================================= */
-
-function renderResult(
-data
-) {
-
-const result =
-$("result");
-
-const status =
-String(
-data?.status || ""
-).toLowerCase();
-
-const name =
-data?.name ||
-data?.guestName ||
-"Guest";
-
-if (
-status === "ok" ||
-status === "success"
-) {
-
-result.className =
-"ok";
-
-let party =
-data.partySize;
-
-if (
-party === undefined ||
-party === null ||
-party === ""
-) {
-
-party =
-data.plusOne
-? 2
-: 1;
-}
-
-let detail =
-`Party of ${escapeHtml(party)}`;
-
-if (
-data.plusOneName
-) {
-
-detail +=
-` · +1: ${escapeHtml(
-data.plusOneName
-)}`;
-}
-
-if (
-data.dietary
-) {
-
-detail +=
-` · Dietary: ${escapeHtml(
-data.dietary
-)}`;
-}
-
-result.innerHTML = `
-
-<div class="badge tick">
-✓
-</div>
-
-<div class="status-line">
-Checked In
-</div>
-
-<div class="guestName">
-${escapeHtml(name)}
-</div>
-
-<p class="detail">
-${detail}
-</p>
-
-`;
-
-return;
-}
-
-if (
-status === "already"
-) {
-
-result.className =
-"warn";
-
-const time =
-formatTime(
-data.time ||
-data.checkedInAt ||
-data.timestamp
-);
-
-result.innerHTML = `
-
-<div class="badge warnbadge">
-✓
-</div>
-
-<div class="status-line">
-Already Checked In
-</div>
-
-<div class="guestName">
-${escapeHtml(name)}
-</div>
-
-<p class="detail">
-${
-time
-? "Checked in at " +
-escapeHtml(time)
-: "This guest has already been checked in."
-}
-</p>
-
-`;
-
-return;
-}
-
-if (
-status === "not_attending"
-) {
-
-result.className =
-"err";
-
-result.innerHTML = `
-
-<div class="badge cross">
-✕
-</div>
-
-<div class="status-line">
-Not Attending
-</div>
-
-<div class="guestName">
-${escapeHtml(name)}
-</div>
-
-<p class="detail">
-This guest RSVP'd as not attending.
-</p>
-
-`;
-
-return;
-}
-
-if (
-status === "not_found"
-) {
-
-result.className =
-"err";
-
-result.innerHTML = `
-
-<div class="badge cross">
-✕
-</div>
-
-<div class="status-line">
-Not Found
-</div>
-
-<div class="guestName">
-No matching guest
-</div>
-
-<p class="detail">
-Check the QR code or manually enter the Guest ID.
-</p>
-
-`;
-
-return;
-}
-
-result.className =
-"error";
-
-result.innerHTML = `
-
-<div class="badge cross">
-✕
-</div>
-
-<div class="status-line">
-Error
-</div>
-
-<div class="guestName">
-Couldn't Check In
-</div>
-
-<p class="detail">
-${escapeHtml(
-data?.message ||
-"Please check your connection and try again."
-)}
-</p>
-
-`;
-}
-
-/* =========================================================
-TIME
-========================================================= */
-
-function formatTime(
-value
-) {
-
-if (!value) {
-
-return "";
-}
-
-try {
-
-return new Date(
-value
-).toLocaleTimeString(
-[],
-{
-hour: "2-digit",
-minute: "2-digit"
-}
-);
-
-} catch (error) {
-
-return String(value);
-}
-}
-
-/* =========================================================
-COUNTER
-========================================================= */
 
 async function refreshCounter() {
-
-try {
-
-const response =
-await apiGet(
-"stats"
-);
-
-const data = response.data || response.stats || response;
-
-$("checkedInCount")
-.textContent =
-Number(
-data.checkedIn || data.CheckedIn || 0
-);
-
-$("attendingCount")
-.textContent =
-Number(
-data.attending || data.Attending || 0
-);
-
-} catch (error) {
-
-console.warn(
-"Stats error:",
-error
-);
-}
+  try {
+    const data = await apiGet("stats");
+    $("checkedInCount").textContent = Number(data.checkedIn || 0);
+    $("attendingCount").textContent = Number(data.attending || 0);
+  } catch (error) {
+    console.warn("Stats error:", error);
+  }
 }
 
-/* Refresh every 15 seconds */
+setInterval(refreshCounter, 15000);
 
-setInterval(
-refreshCounter,
-15000
-);
+$("manualBtn").addEventListener("click", () => {
+  const value = $("manualId").value.trim();
+  if (!value) { showToast("Enter a Guest ID."); return; }
+  $("manualId").value = "";
+  checkIn(value);
+});
 
-/* =========================================================
-MANUAL CHECK-IN
-========================================================= */
-
-$("manualBtn")
-.addEventListener(
-"click",
-() => {
-
-const value =
-$("manualId")
-.value
-.trim();
-
-if (!value) {
-
-showToast(
-"Enter a Guest ID."
-);
-
-return;
-}
-
-$("manualId").value = "";
-
-checkIn(value);
-}
-);
-
-$("manualId")
-.addEventListener(
-"keydown",
-event => {
-
-if (
-event.key === "Enter"
-) {
-
-event.preventDefault();
-
-$("manualBtn").click();
-}
-}
-);
-
-/* =========================================================
-ADMIN
-========================================================= */
+$("manualId").addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    $("manualBtn").click();
+  }
+});
 
 let allGuests = [];
-
 let adminInitialized = false;
 
 async function initAdmin() {
-
-if (
-adminInitialized
-) {
-
-return;
+  if (adminInitialized) return;
+  adminInitialized = true;
+  await loadStats();
+  await loadGuestList();
+  $("admRefresh").addEventListener("click", refreshAdmin);
+  $("admRefresh2").addEventListener("click", refreshAdmin);
+  $("admSearch").addEventListener("input", renderTable);
 }
-
-adminInitialized = true;
-
-await loadStats();
-
-await loadGuestList();
-
-$("admRefresh")
-.addEventListener(
-"click",
-refreshAdmin
-);
-
-$("admRefresh2")
-.addEventListener(
-"click",
-refreshAdmin
-);
-
-$("admSearch")
-.addEventListener(
-"input",
-renderTable
-);
-}
-
-/* =========================================================
-ADMIN REFRESH
-========================================================= */
 
 async function refreshAdmin() {
-
-await loadStats();
-
-await loadGuestList();
-
-showToast(
-"Guest database refreshed."
-);
+  await loadStats();
+  await loadGuestList();
+  showToast("Guest database refreshed.");
 }
-
-/* =========================================================
-ADMIN STATS
-========================================================= */
 
 async function loadStats() {
-
-try {
-
-const response =
-await apiGet(
-"stats"
-);
-
-const data = response.data || response.stats || response;
-
-$("admAttending")
-.textContent =
-Number(
-data.attending || data.Attending || 0
-);
-
-$("admDeclined")
-.textContent =
-Number(
-data.declined || data.Declined || 0
-);
-
-$("admGuests")
-.textContent =
-Number(
-data.totalGuests ||
-data.total ||
-data.TotalGuests ||
-data.Total ||
-0
-);
-
-$("admCheckedIn")
-.textContent =
-Number(
-data.checkedIn || data.CheckedIn || 0
-);
-
-const paidEl = $("admPaid");
-if (paidEl) {
-  paidEl.textContent = Number(
-    data.paid || data.Paid || 0
-  );
+  try {
+    const data = await apiGet("stats");
+    $("admAttending").textContent = Number(data.attending || 0);
+    $("admDeclined").textContent = Number(data.declined || 0);
+    $("admGuests").textContent = Number(data.totalGuests || data.total || 0);
+    $("admCheckedIn").textContent = Number(data.checkedIn || 0);
+  } catch (error) {
+    console.error("Admin stats error:", error);
+    showToast("Couldn't load statistics.");
+  }
 }
-
-} catch (error) {
-
-console.error(
-"Admin stats error:",
-error
-);
-
-showToast(
-"Couldn't load statistics."
-);
-}
-}
-
-/* =========================================================
-LOAD GUEST LIST
-========================================================= */
 
 async function loadGuestList() {
-
-try {
-
-const data =
-await apiGet(
-"list"
-);
-
-/*
-* Support several possible
-* Apps Script response shapes.
-*/
-
-if (
-Array.isArray(data)
-) {
-
-allGuests = data;
-
-} else if (
-Array.isArray(data.guests)
-) {
-
-allGuests =
-data.guests;
-
-} else if (
-Array.isArray(data.data)
-) {
-
-allGuests =
-data.data;
-
-} else {
-
-allGuests = [];
+  try {
+    const data = await apiGet("list");
+    if (Array.isArray(data)) {
+      allGuests = data;
+    } else if (Array.isArray(data.guests)) {
+      allGuests = data.guests;
+    } else if (Array.isArray(data.responses)) {
+      allGuests = data.responses;
+    } else if (Array.isArray(data.data)) {
+      allGuests = data.data;
+    } else {
+      allGuests = [];
+    }
+    renderTable();
+  } catch (error) {
+    console.error("Guest list error:", error);
+    allGuests = [];
+    renderTable();
+    showToast("Couldn't load guest list.");
+  }
 }
 
-renderTable();
-
-} catch (error) {
-
-console.error(
-"Guest list error:",
-error
-);
-
-allGuests = [];
-
-renderTable();
-
-showToast(
-"Couldn't load guest list."
-);
+function normalizeGuest(guest) {
+  return {
+    guestId: guest.guestId || guest.id || guest.GuestId || guest.GuestID || "",
+    name: guest.name || guest.Name || "",
+    email: guest.email || guest.Email || "",
+    attending: String(guest.attending ?? guest.Attending ?? "").toLowerCase(),
+    plusOne: guest.plusOne ?? guest.PlusOne ?? false,
+    plusOneCount: Number(guest.plusOneCount ?? guest.PlusOneCount ?? (guest.plusOne ? 1 : 0)),
+    partySize: Number(guest.partySize ?? guest.PartySize ?? (guest.plusOne ? 2 : 1)),
+    checkedIn: guest.checkedIn ?? guest.CheckedIn ?? false,
+    checkedInAt: guest.checkedInAt || guest.CheckedInAt || guest.CheckedInTime || guest.time || "",
+    dietary: guest.dietary || guest.Dietary || "",
+    plusOneName: guest.plusOneName || guest.PlusOneName || "",
+    paymentStatus: String(guest.paymentStatus || guest.PaymentStatus || "").toLowerCase()
+  };
 }
-}
-
-/* =========================================================
-NORMALIZE GUEST
-========================================================= */
-
-function normalizeGuest(
-guest
-) {
-
-return {
-
-guestId:
-guest.guestId ||
-guest.id ||
-guest.GuestID ||
-"",
-
-name:
-guest.name ||
-guest.Name ||
-"",
-
-email:
-guest.email ||
-guest.Email ||
-"",
-
-attending:
-String(
-guest.attending ??
-guest.Attending ??
-""
-).toLowerCase(),
-
-plusOne:
-guest.plusOne ??
-guest.PlusOne ??
-false,
-
-plusOneCount:
-Number(
-guest.plusOneCount ??
-guest.PlusOneCount ??
-(
-guest.plusOne
-? 1
-: 0
-)
-),
-
-partySize:
-Number(
-guest.partySize ??
-guest.PartySize ??
-(
-guest.plusOne
-? 2
-: 1
-)
-),
-
-checkedIn:
-guest.checkedIn ??
-guest.CheckedIn ??
-false,
-
-checkedInAt:
-guest.checkedInAt ||
-guest.CheckedInAt ||
-guest.time ||
-"",
-
-dietary:
-guest.dietary ||
-guest.Dietary ||
-"",
-
-plusOneName:
-guest.plusOneName ||
-guest.PlusOneName ||
-""
-
-};
-}
-
-/* =========================================================
-RENDER ADMIN TABLE
-========================================================= */
 
 function renderTable() {
+  const body = $("admTableBody");
+  const empty = $("admEmptyNote");
+  const search = String($("admSearch").value || "").trim().toLowerCase();
 
-const body =
-$("admTableBody");
+  const guests = allGuests.map(normalizeGuest).filter(guest => {
+    if (!search) return true;
+    return [guest.name, guest.email, guest.guestId].join(" ").toLowerCase().includes(search);
+  });
 
-const empty =
-$("admEmptyNote");
+  body.innerHTML = "";
 
-const search =
-String(
-$("admSearch")
-.value || ""
-)
-.trim()
-.toLowerCase();
+  if (!guests.length) {
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
 
-const guests =
-allGuests
-.map(
-normalizeGuest
-)
-.filter(
-guest => {
+  guests.forEach(guest => {
+    const tr = document.createElement("tr");
+    const attending = guest.attending === "yes" || guest.attending === "true";
+    const rsvpBadge = attending
+      ? `<span class="badge-small badge-attending">Attending</span>`
+      : `<span class="badge-small badge-declined">Declined</span>`;
+    const party = guest.partySize || (attending ? 1 : 0);
+    const checkin = guest.checkedIn
+      ? `<span class="badge-small badge-attending">✓ Checked In</span>${guest.checkedInAt ? `<br><small>${escapeHtml(formatTime(guest.checkedInAt))}</small>` : ""}`
+      : "—";
 
-if (!search) {
+    const isPaid = guest.paymentStatus === "paid";
+    const paymentBadge = isPaid
+      ? `<span class="badge-small badge-attending">Paid</span>`
+      : guest.paymentStatus === "unpaid"
+        ? `<span class="badge-small badge-declined">Not Paid</span>`
+        : `<span class="badge-small badge-nodetails">No Details</span>`;
 
-return true;
+    tr.innerHTML = `
+      <td>
+        <strong>${escapeHtml(guest.name || "Unnamed Guest")}</strong>
+        <br>
+        <small>${escapeHtml(guest.guestId)}</small>
+      </td>
+      <td>${escapeHtml(guest.email || "—")}</td>
+      <td>${rsvpBadge}</td>
+      <td>
+        ${escapeHtml(String(party))}
+        ${guest.plusOneName ? `<br><small>+1: ${escapeHtml(guest.plusOneName)}</small>` : ""}
+      </td>
+      <td>${checkin}</td>
+      <td>
+        ${attending && guest.email ? `
+          <div style="margin-bottom:6px;">${paymentBadge}</div>
+          <button class="payment-btn" data-payment-id="${escapeHtml(guest.guestId)}" type="button">Send Payment Details</button>
+          <button class="payment-btn" data-mark-paid-id="${escapeHtml(guest.guestId)}" data-current-status="${isPaid ? 'paid' : 'unpaid'}" type="button" style="margin-top:6px;background:${isPaid ? '#999' : 'var(--burgundy-800)'};">${isPaid ? 'Mark Unpaid' : 'Mark Paid'}</button>
+          <div class="payment-status" id="payment-status-${escapeHtml(guest.guestId)}"></div>
+        ` : "—"}
+      </td>
+    `;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll("[data-payment-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      sendPaymentDetails(button.dataset.paymentId, button);
+    });
+  });
+
+  body.querySelectorAll("[data-mark-paid-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      togglePaymentStatus(button.dataset.markPaidId, button.dataset.currentStatus, button);
+    });
+  });
 }
 
-return [
-
-guest.name,
-
-guest.email,
-
-guest.guestId
-
-]
-.join(" ")
-.toLowerCase()
-.includes(search);
-}
-);
-
-body.innerHTML = "";
-
-if (!guests.length) {
-
-empty.classList.remove(
-"hidden"
-);
-
-return;
+async function sendPaymentDetails(guestId, button) {
+  const status = document.getElementById("payment-status-" + guestId);
+  if (!guestId || !status) return;
+  button.disabled = true;
+  button.textContent = "Sending…";
+  status.textContent = "Sending payment details…";
+  status.className = "payment-status sending";
+  try {
+    const data = await apiGet("sendPayment", { id: guestId });
+    if (data.status !== "success") throw new Error(data.message || "Payment email failed.");
+    const email = data.email || data.to || "";
+    status.textContent = email ? `✓ Sent to ${email}` : "✓ Sent to guest";
+    status.className = "payment-status success";
+    button.textContent = "Sent";
+  } catch (error) {
+    console.error("Payment email error:", error);
+    status.textContent = "✕ Couldn't send — try again.";
+    status.className = "payment-status error";
+    button.textContent = "Send Payment Details";
+  } finally {
+    button.disabled = false;
+  }
 }
 
-empty.classList.add(
-"hidden"
-);
-
-guests.forEach(
-guest => {
-
-const tr =
-document.createElement(
-"tr"
-);
-
-const attending =
-guest.attending ===
-"yes" ||
-guest.attending ===
-"true";
-
-const rsvpBadge =
-attending
-
-? `<span class="badge-small badge-attending">Attending</span>`
-
-: `<span class="badge-small badge-declined">Declined</span>`;
-
-const party =
-guest.partySize ||
-(
-attending
-? 1
-: 0
-);
-
-const checkin =
-guest.checkedIn
-
-? `<span class="badge-small badge-attending">✓ Checked In</span>` + (guest.checkedInAt ? `<br><small>${escapeHtml(formatTime(guest.checkedInAt))}</small>` : "")
-
-: "—";
-
-tr.innerHTML = `
-
-<td>
-
-<strong>
-${escapeHtml(
-guest.name ||
-"Unnamed Guest"
-)}
-</strong>
-
-<br>
-
-<small>
-${escapeHtml(
-guest.guestId
-)}
-</small>
-
-</td>
-
-<td>
-${escapeHtml(
-guest.email ||
-"—"
-)}
-</td>
-
-<td>
-${rsvpBadge}
-</td>
-
-<td>
-
-${escapeHtml(
-String(party)
-)}
-
-${ guest.plusOneName ? `<br><small>+1: ${escapeHtml( guest.plusOneName )}</small>`
-: ""
+async function togglePaymentStatus(guestId, currentStatus, button) {
+  const status = document.getElementById("payment-status-" + guestId);
+  if (!guestId) return;
+  const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
+  button.disabled = true;
+  button.textContent = "Saving…";
+  try {
+    const data = await apiGet("setPayment", { id: guestId, status: newStatus });
+    if (data.status !== "success") throw new Error(data.message || "Could not update payment status.");
+    const rawGuest = allGuests.find(g => String(g.guestId || g.GuestId || g.GuestID || "").toUpperCase() === guestId.toUpperCase());
+    if (rawGuest) rawGuest.paymentStatus = newStatus;
+    if (status) {
+      status.textContent = newStatus === "paid" ? "✓ Marked as paid" : "Marked as unpaid";
+      status.className = "payment-status success";
+    }
+    renderTable();
+    loadStats();
+  } catch (error) {
+    console.error("Payment status error:", error);
+    if (status) {
+      status.textContent = "✕ Couldn't update — try again.";
+      status.className = "payment-status error";
+    }
+    button.disabled = false;
+  }
 }
-
-</td>
-
-<td>
-${checkin}
-</td>
-
-<td>
-
-${
-attending &&
-guest.email
-
-? `
-
-<button
-class="payment-btn"
-data-payment-id="${escapeHtml(
-guest.guestId
-)}"
-type="button"
->
-Send Payment Details
-</button>
-
-<div
-class="payment-status"
-id="payment-status-${escapeHtml(
-guest.guestId
-)}"
-></div>
-
-`
-
-: "—"
-}
-
-</td>
-
-`;
-
-body.appendChild(
-tr
-);
-}
-);
-
-/*
-• Attach payment listeners
-*/
-
-body
-.querySelectorAll(
-"[data-payment-id]"
-)
-.forEach(
-button => {
-
-button.addEventListener(
-"click",
-() => {
-
-sendPaymentDetails(
-button.dataset.paymentId,
-button
-);
-}
-);
-}
-);
-}
-
-/* =========================================================
-PAYMENT DETAILS
-========================================================= */
-
-async function sendPaymentDetails(
-guestId,
-button
-) {
-
-const status =
-document.getElementById(
-"payment-status-" +
-guestId
-);
-
-if (
-!guestId ||
-!status
-) {
-
-return;
-}
-
-button.disabled = true;
-
-button.textContent =
-"Sending…";
-
-status.textContent =
-"Sending payment details…";
-
-status.className =
-"payment-status sending";
-
-try {
-
-/*
-* This calls:
-*
-* ?action=sendPayment&id=BP-XXXXXX
-*/
-
-const data =
-await apiGet(
-"sendPayment",
-{
-id: guestId
-}
-);
-
-if (
-data.status !==
-"success"
-) {
-
-throw new Error(
-data.message ||
-"Payment email failed."
-);
-}
-
-const email =
-data.email ||
-data.to ||
-"";
-
-status.textContent =
-email
-
-? `✓ Sent to ${email}`
-
-: "✓ Sent to guest";
-
-status.className =
-"payment-status success";
-
-button.textContent =
-"Sent";
-
-} catch (error) {
-
-console.error(
-"Payment email error:",
-error
-);
-
-status.textContent =
-"✕ Couldn't send — try again.";
-
-status.className =
-"payment-status error";
-
-button.textContent =
-"Send Payment Details";
-
-} finally {
-
-button.disabled =
-false;
-}
-}
-
-/* =========================================================
-START
-========================================================= */
 
 boot();
 
@@ -3174,3 +799,4 @@ boot();
 
 </body>
 </html>
+
