@@ -1,509 +1,252 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Check-In — Benson & Precious</title>
+/**
+ * Benson & Precious — QR RSVP + Wedding Day Check-In + Payment Tracking
+ * Google Apps Script Web App backend.
+ *
+ * SETUP
+ * 1. Open your Google Sheet > Extensions > Apps Script.
+ * 2. Replace the ENTIRE contents of Code.gs with this file.
+ * 3. Update CONFIG.PAYMENT_IMAGE_URL below if your filename differs.
+ * 4. Deploy > Manage deployments > (pencil/edit icon) > Version: "New version" > Deploy.
+ *    (Editing code alone does NOT update the live /exec URL — you must redeploy a new version.)
+ * 5. Confirm "Who has access" is set to "Anyone".
+ * 6. No login/token step is required — checkin.html's own on-page login
+ *    (Admin / EventsC01 / EventsC02) is the only access gate. This script
+ *    trusts any request that reaches it, same as before.
+ */
+const CONFIG = {
+  SHEET_NAME: 'Guests',
+  QR_BASE: 'https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=',
+  PAYMENT_IMAGE_URL: 'https://benflya.online/images/payment-details.png',
+  WEDDING_NAME: 'Benson & Precious Wedding',
+  FROM_NAME: 'Benson & Precious',
+  RSVP_AMOUNT: 'QAR 130'
+};
 
-<script>
-  // Same Apps Script Web App URL used by the main site.
-  const API_URL = "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
+// Column layout (1-based sheet columns / 0-based array indices):
+// 1  Guest ID          (0)
+// 2  Created At        (1)
+// 3  Name              (2)
+// 4  Email             (3)
+// 5  Attending         (4)
+// 6  Party Size        (5)
+// 7  Plus One Name     (6)
+// 8  Dietary           (7)
+// 9  Message           (8)
+// 10 Checked In At     (9)
+// 11 QR URL            (10)
+// 12 Phone             (11)
+// 13 Payment Status    (12)
+// 14 Payment Email Sent At (13)
 
-  // Payment details image hosted on the site. Referenced here for admin visibility;
-  // the actual email attachment/link is built server-side in the Apps Script "sendPayment" action.
-  const PAYMENT_IMAGE_URL = "https://benflya.online/images/payment-details.jpg";
-
-  // Soft access gate — NOT real security (visible to anyone who views page
-  // source). Fine for keeping ushers/admin on the right screen at the venue.
-  const CREDENTIALS = {
-    "EventsC01": { password: "Bernadette", role: "scanner", label: "Usher C01" },
-    "EventsC02": { password: "Memory",     role: "scanner", label: "Usher C02" },
-    "Admin":     { password: "Admin",      role: "admin",   label: "Admin" }
-  };
-</script>
-
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
-<style>
-  :root{
-    --burgundy-950:#2c0a15; --burgundy-800:#5c1229;
-    --rose-400:#d7a3b3; --gold-500:#c9a24b;
-    --cream:#fdf9f6; --ink:#220812;
+function doGet(e) {
+  try {
+    const p = (e && e.parameter) || {};
+    const action = p.action || '';
+    if (action === 'list') return json_(listGuests_());
+    if (action === 'stats') return json_(stats_());
+    if (action === 'checkin') return json_(checkin_(p.id));
+    if (action === 'sendPayment') return json_(sendPayment_(p.id));
+    if (action === 'setPayment') return json_(setPayment_(p.id, p.status));
+    return json_({ status: 'ok', service: 'Benson & Precious RSVP API' });
+  } catch (err) {
+    return json_({ status: 'error', message: String(err.message || err) });
   }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{
-    font-family:system-ui,-apple-system,sans-serif;
-    background:var(--burgundy-950); color:var(--cream);
-    min-height:100vh; display:flex; flex-direction:column; align-items:center;
-    padding:20px;
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const action = body.action || 'rsvp';
+    if (action === 'rsvp') return json_(saveRsvp_(body));
+    return json_({ status: 'error', message: 'Unknown action' });
+  } catch (err) {
+    return json_({ status: 'error', message: String(err.message || err) });
   }
-  h1{font-size:1.3rem; font-weight:600; margin-bottom:4px; text-align:center;}
-  .sub{color:var(--rose-400); font-size:0.85rem; margin-bottom:20px; text-align:center;}
+}
 
-  .card{
-    width:100%; max-width:420px; background:var(--cream); color:var(--ink);
-    border-radius:10px; padding:26px; margin-bottom:16px;
-  }
-  .card h2{font-size:1.1rem; margin-bottom:14px; color:var(--burgundy-800);}
-  label{display:block; font-size:0.8rem; font-weight:600; margin:14px 0 6px; color:#5c1229;}
-  input[type=text], input[type=password]{
-    width:100%; padding:12px 14px; border-radius:6px; border:1px solid #ddd; font-size:1rem;
-  }
-  .btn{
-    width:100%; padding:13px; border-radius:6px; border:none; font-weight:700;
-    cursor:pointer; font-size:0.95rem; margin-top:16px;
-  }
-  .btn-primary{background:var(--burgundy-800); color:#fff;}
-  .btn-secondary{background:#999; color:#fff;}
-  .btn-ghost{background:transparent; border:1px solid var(--gold-500); color:var(--gold-500);}
-  .error-msg{color:#b02a2a; font-size:0.85rem; margin-top:10px; display:none;}
+/* ---------------- RSVP submission ---------------- */
 
-  .topbar{
-    width:100%; max-width:640px; display:flex; justify-content:space-between;
-    align-items:center; margin-bottom:16px; font-size:0.85rem; color:var(--rose-400);
-  }
-  .topbar .who{font-weight:600; color:var(--cream);}
-  .topbar button{
-    background:none; border:1px solid var(--rose-400); color:var(--rose-400);
-    padding:6px 14px; border-radius:6px; font-size:0.8rem; cursor:pointer;
-  }
-
-  #reader{width:100%; max-width:420px; border-radius:8px; overflow:hidden; border:2px solid var(--gold-500);}
-  .manual{width:100%; max-width:420px; margin-top:18px; display:flex; gap:8px;}
-  .manual input{flex:1; text-transform:uppercase;}
-  .manual button{padding:12px 20px; border-radius:6px; border:none; background:var(--gold-500); color:var(--burgundy-950); font-weight:600; cursor:pointer;}
-
-  #result{
-    width:100%; max-width:420px; margin-top:20px; padding:28px 22px;
-    border-radius:8px; text-align:center; display:none; animation:pop .25s ease;
-  }
-  @keyframes pop{ from{transform:scale(.94); opacity:0;} to{transform:scale(1); opacity:1;} }
-  #result.ok{background:#1f4d2e; border:2px solid #4caf50;}
-  #result.warn{background:#5c4a12; border:2px solid #d4a017;}
-  #result.err{background:#5c1616; border:2px solid #d43f3f;}
-  .badge{width:72px; height:72px; border-radius:50%; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; font-size:2.2rem; font-weight:700;}
-  .badge.tick{background:#4caf50; color:#0d2612;}
-  .badge.cross{background:#d43f3f; color:#3a0808;}
-  .badge.warnbadge{background:#d4a017; color:#3a2c04;}
-  #result .guestName{font-size:1.7rem; font-weight:700; margin-bottom:6px;}
-  #result .status-line{font-size:0.85rem; letter-spacing:1px; text-transform:uppercase; opacity:0.85; margin-bottom:10px;}
-  #result p.detail{font-size:0.95rem; opacity:0.9; margin-top:4px;}
-
-  #counter{margin-top:24px; font-size:0.85rem; color:var(--rose-400); text-align:center;}
-  #counter b{color:var(--cream); font-size:1.1rem;}
-
-  /* Admin dashboard */
-  .stat-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; width:100%; max-width:780px; margin-bottom:16px;}
-  .stat-box{background:var(--cream); color:var(--burgundy-800); border-radius:8px; padding:16px 8px; text-align:center;}
-  .stat-box .n{font-size:1.6rem; font-weight:800;}
-  .stat-box .l{font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:#7a1f3a;}
-
-  .admin-panel{width:100%; max-width:780px; background:var(--cream); color:var(--ink); border-radius:10px; padding:18px; margin-bottom:16px;}
-  .admin-panel h2{color:var(--burgundy-800); font-size:1.05rem; margin-bottom:12px;}
-  .search-row{display:flex; gap:8px; margin-bottom:12px;}
-  .search-row input{flex:1;}
-  .search-row button{padding:0 16px; border-radius:6px; border:none; background:var(--burgundy-800); color:#fff; font-weight:600; cursor:pointer;}
-
-  table{width:100%; border-collapse:collapse; font-size:0.8rem;}
-  th, td{text-align:left; padding:8px 6px; border-bottom:1px solid #eee; white-space:nowrap;}
-  th{color:#7a1f3a; text-transform:uppercase; font-size:0.68rem; letter-spacing:0.4px;}
-  .pill{display:inline-block; padding:2px 8px; border-radius:20px; font-size:0.7rem; font-weight:700;}
-  .pill-yes{background:#dff2e1; color:#1f4d2e;}
-  .pill-no{background:#f9dede; color:#5c1616;}
-  .pill-checked{background:#dff2e1; color:#1f4d2e;}
-  .pill-notchecked{background:#eee; color:#666;}
-  .pill-paid{background:#dff2e1; color:#1f4d2e;}
-  .pill-unpaid{background:#f9dede; color:#5c1616;}
-  .pill-nodetails{background:#eee; color:#777;}
-  .table-wrap{max-height:460px; overflow:auto;}
-  .empty-note{text-align:center; padding:20px; color:#888; font-size:0.85rem;}
-
-  .action-cell{white-space:normal;}
-  .row-actions{display:flex; gap:6px; flex-wrap:nowrap;}
-  .send-status{font-size:0.68rem; margin-top:4px; font-weight:600;}
-  .send-status.send-ok{color:#1f4d2e;}
-  .send-status.send-err{color:#b02a2a;}
-  .mini-btn{
-    padding:6px 10px; border-radius:6px; border:none; font-size:0.7rem; font-weight:700;
-    cursor:pointer; white-space:nowrap;
-  }
-  .mini-btn.pay-send{background:#25D366; color:#08240f;}
-  .mini-btn.pay-mark{background:var(--burgundy-800); color:#fff;}
-  .mini-btn.pay-unmark{background:#999; color:#fff;}
-  .mini-btn:disabled{opacity:0.5; cursor:not-allowed;}
-
-  .hidden{display:none !important;}
-</style>
-</head>
-<body>
-
-<h1>B &amp; P</h1>
-<p class="sub">Wedding Check-In</p>
-
-<!-- ============ LOGIN ============ -->
-<div id="loginScreen" class="card">
-  <h2>Sign In</h2>
-  <label for="loginUser">Username</label>
-  <input type="text" id="loginUser" autocapitalize="none" autocomplete="off">
-  <label for="loginPass">Password</label>
-  <input type="password" id="loginPass">
-  <button class="btn btn-primary" id="loginBtn">Log In</button>
-  <p class="error-msg" id="loginError">Incorrect username or password.</p>
-</div>
-
-<!-- ============ SCANNER (ushers) ============ -->
-<div id="scannerScreen" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-  <div class="topbar">
-    <span>Signed in as <span class="who" id="scannerWho"></span></span>
-    <button id="scannerLogout">Log out</button>
-  </div>
-
-  <div id="reader"></div>
-
-  <div class="manual">
-    <input type="text" id="manualId" placeholder="Or type Guest ID, e.g. BP-K7QX4M" autocapitalize="characters">
-    <button id="manualBtn">Check In</button>
-  </div>
-
-  <div id="result"></div>
-
-  <div id="counter">Checked in today: <b id="checkedInCount">0</b> / <span id="attendingCount">0</span> expected</div>
-</div>
-
-<!-- ============ ADMIN DASHBOARD ============ -->
-<div id="adminScreen" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-  <div class="topbar">
-    <span>Signed in as <span class="who">Admin</span></span>
-    <button id="adminLogout">Log out</button>
-  </div>
-
-  <div class="stat-grid">
-    <div class="stat-box"><div class="n" id="admAttending">–</div><div class="l">Attending</div></div>
-    <div class="stat-box"><div class="n" id="admDeclined">–</div><div class="l">Declined</div></div>
-    <div class="stat-box"><div class="n" id="admGuests">–</div><div class="l">Total Guests</div></div>
-    <div class="stat-box"><div class="n" id="admCheckedIn">–</div><div class="l">Checked In</div></div>
-    <div class="stat-box"><div class="n" id="admPaid">–</div><div class="l">Paid</div></div>
-  </div>
-
-  <div class="admin-panel">
-    <h2>Guest List</h2>
-    <div class="search-row">
-      <input type="text" id="admSearch" placeholder="Search by name or email">
-      <button id="admRefresh">Refresh</button>
-    </div>
-    <div class="table-wrap">
-      <table id="admTable">
-        <thead>
-          <tr><th>Name</th><th>Attending</th><th>+1</th><th>Checked In</th><th>Payment</th><th>Actions</th></tr>
-        </thead>
-        <tbody id="admTableBody"></tbody>
-      </table>
-      <p class="empty-note hidden" id="admEmptyNote">No responses yet.</p>
-    </div>
-  </div>
-</div>
-
-<script>
-(function(){
-  const SESSION_KEY = "bp_checkin_session";
-
-  const loginScreen = document.getElementById("loginScreen");
-  const scannerScreen = document.getElementById("scannerScreen");
-  const adminScreen = document.getElementById("adminScreen");
-
-  function getSession(){
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
-    catch(e){ return null; }
-  }
-  function setSession(user, role, label){
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, role, label }));
-  }
-  function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
-
-  function showScreen(name){
-    loginScreen.classList.toggle("hidden", name !== "login");
-    scannerScreen.classList.toggle("hidden", name !== "scanner");
-    adminScreen.classList.toggle("hidden", name !== "admin");
+function saveRsvp_(d) {
+  const name = String(d.name || '').trim();
+  const email = String(d.email || '').trim();
+  const phone = String(d.phone || '').trim();
+  const attending = String(d.attending || '').toLowerCase();
+  if (!name || !email || !['yes', 'no'].includes(attending)) {
+    throw new Error('Name, email and attendance are required.');
   }
 
-  function boot(){
-    const session = getSession();
-    if (!session) { showScreen("login"); return; }
-    if (session.role === "admin") {
-      document.querySelector("#adminScreen .who").textContent = session.label;
-      showScreen("admin");
-      initAdmin();
-    } else {
-      document.getElementById("scannerWho").textContent = session.label;
-      showScreen("scanner");
-      initScanner();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = getSheet_(ss);
+  const guestId = uniqueGuestId_(sh);
+  const partySize = Math.max(0, Math.min(10, Number(d.partySize || 0)));
+  const plusOneName = String(d.plusOneName || '').trim();
+  const qrUrl = CONFIG.QR_BASE + encodeURIComponent(guestId);
+  const now = new Date();
+
+  sh.appendRow([
+    guestId, now, name, email, attending, partySize, plusOneName,
+    String(d.dietary || '').trim(), String(d.message || '').trim(),
+    '', qrUrl, phone, '', ''
+  ]);
+
+  if (attending === 'yes' && email) sendQrEmail_(email, name, guestId, partySize, qrUrl);
+  return { status: 'success', guestId: guestId, qrUrl: qrUrl };
+}
+
+function sendQrEmail_(email, name, guestId, partySize, qrUrl) {
+  const party = partySize ? ' + ' + partySize + (partySize === 1 ? ' guest' : ' guests') : '';
+  const qrBlob = UrlFetchApp.fetch(qrUrl).getBlob().setName('wedding-qr.png');
+  const html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">' +
+    '<h2 style="color:#55162A">Your Wedding QR Pass</h2>' +
+    '<p>Dear ' + escapeHtml_(name) + ',</p>' +
+    '<p>Your RSVP for <b>' + CONFIG.WEDDING_NAME + '</b> has been received.</p>' +
+    '<p><b>Guest ID:</b> ' + guestId + '<br><b>Party:</b> ' + escapeHtml_(name + party) + '</p>' +
+    '<p>Show the QR code below at the entrance on October 10, 2026.</p>' +
+    '<p><img src="cid:weddingQr" width="300" height="300" alt="Wedding QR code"></p>' +
+    '<p>Please save this email or QR image. A second scan will be flagged automatically.</p>' +
+    '<p>With love,<br>' + CONFIG.FROM_NAME + '</p></div>';
+  MailApp.sendEmail({ to: email, subject: 'Your wedding QR pass — Benson & Precious', htmlBody: html, inlineImages: { weddingQr: qrBlob }, name: CONFIG.FROM_NAME });
+}
+
+/* ---------------- Payment details email + status ---------------- */
+
+function sendPayment_(guestId) {
+  guestId = String(guestId || '').trim().toUpperCase();
+  if (!guestId) return { status: 'error', message: 'Missing guest ID.' };
+
+  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  const values = sh.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0]).toUpperCase() === guestId) {
+      const name = String(values[i][2]);
+      const email = String(values[i][3] || '');
+      if (!email) return { status: 'error', message: 'No email on file for this guest.' };
+      sendPaymentEmail_(email, name, guestId);
+      sh.getRange(i + 1, 14).setValue(new Date()); // column 14 = Payment Email Sent At
+      return { status: 'success', email: email };
     }
   }
+  return { status: 'error', message: 'Guest not found.' };
+}
 
-  // ---------- Login ----------
-  document.getElementById("loginBtn").addEventListener("click", () => {
-    const uRaw = document.getElementById("loginUser").value.trim();
-    const p = document.getElementById("loginPass").value;
-    const matchKey = Object.keys(CREDENTIALS).find(k => k.toLowerCase() === uRaw.toLowerCase());
-    const entry = matchKey ? CREDENTIALS[matchKey] : null;
-    const errBox = document.getElementById("loginError");
-    if (entry && entry.password === p) {
-      errBox.style.display = "none";
-      setSession(matchKey, entry.role, entry.label);
-      boot();
-    } else {
-      errBox.style.display = "block";
+function sendPaymentEmail_(email, name, guestId) {
+  const html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">' +
+    '<h2 style="color:#55162A">Wedding Payment Details</h2>' +
+    '<p>Dear ' + escapeHtml_(name) + ',</p>' +
+    '<p>Thank you for RSVPing to <b>' + CONFIG.WEDDING_NAME + '</b>! To secure your seat, please complete payment of <b>' + CONFIG.RSVP_AMOUNT + '</b> using the details below.</p>' +
+    '<p><img src="' + CONFIG.PAYMENT_IMAGE_URL + '" width="400" alt="Payment details"></p>' +
+    '<p><b>Important:</b> please use your Guest ID as the payment reference: <b>' + guestId + '</b></p>' +
+    '<p>Once we confirm your payment, your wedding QR pass will follow separately.</p>' +
+    '<p>With love,<br>' + CONFIG.FROM_NAME + '</p></div>';
+  MailApp.sendEmail({ to: email, subject: 'Payment details — Benson & Precious Wedding', htmlBody: html, name: CONFIG.FROM_NAME });
+}
+
+function setPayment_(guestId, status) {
+  status = String(status || '').toLowerCase();
+  if (!['paid', 'unpaid'].includes(status)) return { status: 'error', message: 'Invalid status.' };
+  guestId = String(guestId || '').trim().toUpperCase();
+
+  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  const values = sh.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0]).toUpperCase() === guestId) {
+      sh.getRange(i + 1, 13).setValue(status); // column 13 = Payment Status
+      return { status: 'success' };
     }
+  }
+  return { status: 'error', message: 'Guest not found.' };
+}
+
+/* ---------------- Check-in (scanner) ---------------- */
+
+function checkin_(guestId) {
+  guestId = String(guestId || '').trim().toUpperCase();
+  if (!guestId) return { status: 'not_found' };
+
+  const sh = getSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  const values = sh.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0]).toUpperCase() === guestId) {
+      const name = String(values[i][2]);
+      const attending = String(values[i][4]).toLowerCase();
+      const plusOneName = String(values[i][6] || '');
+      const dietary = String(values[i][7] || '');
+      const checkedAt = values[i][9];
+
+      if (attending !== 'yes') return { status: 'not_attending', name: name };
+      if (checkedAt) {
+        return { status: 'already', name: name, time: new Date(checkedAt).toISOString(), plusOne: !!plusOneName, plusOneName: plusOneName, dietary: dietary };
+      }
+      const stamp = new Date();
+      sh.getRange(i + 1, 10).setValue(stamp);
+      return { status: 'ok', name: name, plusOne: !!plusOneName, plusOneName: plusOneName, dietary: dietary };
+    }
+  }
+  return { status: 'not_found' };
+}
+
+/* ---------------- Stats + list (admin dashboard) ---------------- */
+
+function stats_() {
+  const v = getSheet_(SpreadsheetApp.getActiveSpreadsheet()).getDataRange().getValues();
+  let attending = 0, declined = 0, checkedIn = 0, paid = 0;
+  for (let i = 1; i < v.length; i++) {
+    const att = String(v[i][4]).toLowerCase();
+    if (att === 'yes') attending++;
+    if (att === 'no') declined++;
+    if (v[i][9]) checkedIn++;
+    if (String(v[i][12] || '').toLowerCase() === 'paid') paid++;
+  }
+  return { status: 'success', attending: attending, declined: declined, totalGuests: v.length - 1, checkedIn: checkedIn, paid: paid };
+}
+
+function listGuests_() {
+  const v = getSheet_(SpreadsheetApp.getActiveSpreadsheet()).getDataRange().getValues();
+  const responses = v.slice(1).map(function (r) {
+    return {
+      GuestId: String(r[0] || ''),
+      Name: String(r[2] || ''),
+      Email: String(r[3] || ''),
+      Attending: String(r[4] || ''),
+      PartySize: Number(r[5] || 0),
+      PlusOneName: String(r[6] || ''),
+      PlusOne: r[6] ? 'yes' : 'no',
+      Dietary: String(r[7] || ''),
+      Message: String(r[8] || ''),
+      CheckedIn: r[9] ? 'yes' : 'no',
+      CheckedInTime: r[9] ? new Date(r[9]).toISOString() : '',
+      Phone: String(r[11] || ''),
+      PaymentStatus: String(r[12] || ''),
+      PaymentEmailSentAt: r[13] ? new Date(r[13]).toISOString() : ''
+    };
   });
-  document.getElementById("loginPass").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") document.getElementById("loginBtn").click();
-  });
+  return { status: 'success', responses: responses };
+}
 
-  document.getElementById("scannerLogout").addEventListener("click", () => { clearSession(); location.reload(); });
-  document.getElementById("adminLogout").addEventListener("click", () => { clearSession(); location.reload(); });
+/* ---------------- Sheet + helpers ---------------- */
 
-  // ---------- Scanner (ushers) ----------
-  let scannerInitialized = false;
-  function initScanner(){
-    if (scannerInitialized) return;
-    scannerInitialized = true;
-
-    const resultBox = document.getElementById("result");
-    let busy = false;
-
-    function escapeHtml_(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-    function formatTime_(iso){ try { return new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }); } catch(e){ return ""; } }
-
-    function showResult(status, name, extra){
-      resultBox.style.display = "block";
-      resultBox.className = "";
-      extra = extra || {};
-      let cls, badgeCls, badgeSymbol, statusLine, displayName, detail = "";
-
-      if (status === "ok") {
-        cls="ok"; badgeCls="tick"; badgeSymbol="✓"; statusLine="Checked In"; displayName=name||"Guest";
-        detail = extra.plusOne ? ("Party of 2" + (extra.plusOneName ? " — with " + extra.plusOneName : "")) : "Party of 1";
-        if (extra.dietary) detail += " · Dietary: " + extra.dietary;
-      } else if (status === "already") {
-        cls="warn"; badgeCls="warnbadge"; badgeSymbol="✓"; statusLine="Already Checked In"; displayName=name||"Guest";
-        detail = "Checked in at " + formatTime_(extra.time);
-      } else if (status === "not_attending") {
-        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Not Attending"; displayName=name||"—";
-        detail = "This guest RSVP'd as not attending.";
-      } else if (status === "not_found") {
-        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Not Found"; displayName="No matching guest";
-        detail = "Double-check the code, or search the guest list manually.";
-      } else {
-        cls="err"; badgeCls="cross"; badgeSymbol="✕"; statusLine="Error"; displayName="Couldn't look this up";
-        detail = "Check your connection and try again.";
-      }
-
-      resultBox.classList.add(cls);
-      resultBox.innerHTML =
-        '<div class="badge ' + badgeCls + '">' + badgeSymbol + '</div>' +
-        '<div class="status-line">' + statusLine + '</div>' +
-        '<div class="guestName">' + escapeHtml_(displayName) + '</div>' +
-        '<p class="detail">' + escapeHtml_(detail) + '</p>';
-    }
-
-    async function checkIn(guestId){
-      if (busy || !guestId) return;
-      busy = true;
-      guestId = guestId.trim().toUpperCase();
-      if (!API_URL) { showResult("error"); busy = false; return; }
-      try {
-        const res = await fetch(API_URL + "?action=checkin&id=" + encodeURIComponent(guestId));
-        const data = await res.json();
-        showResult(data.status, data.name, data);
-      } catch (err) {
-        showResult("error");
-      }
-      refreshCounter();
-      setTimeout(() => { busy = false; }, 1800);
-    }
-
-    async function refreshCounter(){
-      if (!API_URL) return;
-      try {
-        const res = await fetch(API_URL + "?action=stats");
-        const data = await res.json();
-        document.getElementById("checkedInCount").textContent = data.checkedIn || 0;
-        document.getElementById("attendingCount").textContent = data.attending || 0;
-      } catch (err) {}
-    }
-    refreshCounter();
-    setInterval(refreshCounter, 15000);
-
-    document.getElementById("manualBtn").addEventListener("click", () => {
-      const val = document.getElementById("manualId").value;
-      checkIn(val);
-      document.getElementById("manualId").value = "";
-    });
-    document.getElementById("manualId").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") document.getElementById("manualBtn").click();
-    });
-
-    if (window.Html5Qrcode) {
-      const scanner = new Html5Qrcode("reader");
-      Html5Qrcode.getCameras().then(cameras => {
-        if (!cameras || !cameras.length) return;
-        const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
-        scanner.start(
-          backCam.id, { fps: 10, qrbox: 240 },
-          (decodedText) => { checkIn(decodedText); },
-          () => {}
-        );
-      }).catch(() => {
-        document.getElementById("reader").innerHTML =
-          '<p style="padding:20px;text-align:center;color:#d7a3b3">Camera unavailable — use manual entry below.</p>';
-      });
+function getSheet_(ss) {
+  const headers = ['Guest ID', 'Created At', 'Name', 'Email', 'Attending', 'Party Size', 'Plus One Name', 'Dietary', 'Message', 'Checked In At', 'QR URL', 'Phone', 'Payment Status', 'Payment Email Sent At'];
+  let sh = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(CONFIG.SHEET_NAME);
+    sh.appendRow(headers);
+    sh.setFrozenRows(1);
+  } else {
+    const lastCol = sh.getLastColumn();
+    if (lastCol < headers.length) {
+      sh.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]);
     }
   }
+  return sh;
+}
 
-  // ---------- Admin dashboard ----------
-  let allGuests = [];
-  function initAdmin(){
-    loadStats();
-    loadGuestList();
-    document.getElementById("admRefresh").addEventListener("click", () => { loadStats(); loadGuestList(); });
-    document.getElementById("admSearch").addEventListener("input", renderTable);
-  }
+function uniqueGuestId_(sh) {
+  const existing = new Set(sh.getRange(2, 1, Math.max(0, sh.getLastRow() - 1), 1).getValues().flat().map(String));
+  let id;
+  do { id = 'BP-' + Utilities.getUuid().replace(/-/g, '').substring(0, 6).toUpperCase(); } while (existing.has(id));
+  return id;
+}
 
-  async function loadStats(){
-    try {
-      const res = await fetch(API_URL + "?action=stats");
-      const data = await res.json();
-      document.getElementById("admAttending").textContent = data.attending ?? 0;
-      document.getElementById("admDeclined").textContent = data.declined ?? 0;
-      document.getElementById("admGuests").textContent = data.totalGuests ?? 0;
-      document.getElementById("admCheckedIn").textContent = data.checkedIn ?? 0;
-      document.getElementById("admPaid").textContent = data.paid ?? 0;
-    } catch (err) {}
-  }
-
-  async function loadGuestList(){
-    try {
-      const res = await fetch(API_URL + "?action=list");
-      const data = await res.json();
-      allGuests = data.responses || [];
-      renderTable();
-    } catch (err) {
-      allGuests = [];
-      renderTable();
-    }
-  }
-
-  function escapeHtml_(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-
-  // Payment status is read from a "PaymentStatus" field on each guest record.
-  // Expected values: "paid" | "unpaid" | "" (blank/missing = no details found).
-  function paymentPill_(status){
-    const s = String(status || "").toLowerCase();
-    if (s === "paid") return "<span class='pill pill-paid'>Paid</span>";
-    if (s === "unpaid") return "<span class='pill pill-unpaid'>Not Paid</span>";
-    return "<span class='pill pill-nodetails'>No Details Found</span>";
-  }
-
-  // Sends Email #2 (payment details) automatically from the Apps Script backend —
-  // no WhatsApp tab, no manual step for the admin. Requires an "action=sendPayment"
-  // handler server-side that emails the guest and returns { status: "success" | "error", email }.
-  async function sendPaymentInfo_(guest, btn, statusEl){
-    const guestId = guest.GuestId || guest["Guest ID"] || "";
-    const guestEmail = guest.Email || "";
-    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
-    if (statusEl) { statusEl.textContent = ""; statusEl.className = "send-status"; }
-
-    if (!API_URL || !guestId) {
-      if (statusEl) { statusEl.textContent = "✕ Missing Guest ID — can't send."; statusEl.classList.add("send-err"); }
-      if (btn) { btn.disabled = false; btn.textContent = "Send Payment Info"; }
-      return;
-    }
-
-    try {
-      const res = await fetch(API_URL + "?action=sendPayment&id=" + encodeURIComponent(guestId));
-      const data = await res.json();
-      if (data && data.status === "success") {
-        const sentTo = data.email || guestEmail || "guest";
-        if (statusEl) { statusEl.textContent = "✓ Sent to " + sentTo; statusEl.classList.add("send-ok"); }
-      } else {
-        throw new Error((data && data.message) || "Unknown error");
-      }
-    } catch (err) {
-      if (statusEl) { statusEl.textContent = "✕ Couldn't send — try again."; statusEl.classList.add("send-err"); }
-    }
-    if (btn) { btn.disabled = false; btn.textContent = "Send Payment Info"; }
-  }
-
-  async function setPaymentStatus_(guest, newStatus, btn){
-    if (btn) btn.disabled = true;
-    try {
-      if (API_URL) {
-        const id = encodeURIComponent(guest.GuestId || guest["Guest ID"] || "");
-        await fetch(API_URL + "?action=setPayment&id=" + id + "&status=" + newStatus);
-      }
-      guest.PaymentStatus = newStatus;
-      renderTable();
-      loadStats();
-    } catch (err) {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  function renderTable(){
-    const q = document.getElementById("admSearch").value.trim().toLowerCase();
-    const tbody = document.getElementById("admTableBody");
-    const emptyNote = document.getElementById("admEmptyNote");
-    const filtered = allGuests.filter(g => {
-      if (!q) return true;
-      return String(g.Name || "").toLowerCase().includes(q) || String(g.Email || "").toLowerCase().includes(q);
-    });
-
-    if (!filtered.length) {
-      tbody.innerHTML = "";
-      emptyNote.classList.remove("hidden");
-      return;
-    }
-    emptyNote.classList.add("hidden");
-
-    tbody.innerHTML = "";
-    filtered.forEach((g, idx) => {
-      const attending = String(g.Attending || "").toLowerCase() === "yes";
-      const checkedIn = String(g.CheckedIn || "").toLowerCase() === "yes";
-      const plusOne = String(g.PlusOne || "").toLowerCase() === "yes";
-      const payStatus = String(g.PaymentStatus || "").toLowerCase();
-      const isPaid = payStatus === "paid";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + escapeHtml_(g.Name || "") + "</td>" +
-        "<td><span class='pill " + (attending ? "pill-yes" : "pill-no") + "'>" + (attending ? "Yes" : "No") + "</span></td>" +
-        "<td>" + (plusOne ? "Yes" : "—") + "</td>" +
-        "<td><span class='pill " + (checkedIn ? "pill-checked" : "pill-notchecked") + "'>" + (checkedIn ? "Checked In" : "Not Yet") + "</span></td>" +
-        "<td>" + paymentPill_(payStatus) + "</td>" +
-        "<td class='action-cell'><div class='row-actions'></div><div class='send-status'></div></td>";
-
-      const actionsCell = tr.querySelector(".row-actions");
-      const statusEl = tr.querySelector(".send-status");
-
-      const sendBtn = document.createElement("button");
-      sendBtn.className = "mini-btn pay-send";
-      sendBtn.textContent = "Send Payment Info";
-      sendBtn.title = "Automatically emails payment details to the guest";
-      sendBtn.addEventListener("click", () => sendPaymentInfo_(g, sendBtn, statusEl));
-      actionsCell.appendChild(sendBtn);
-
-      const toggleBtn = document.createElement("button");
-      toggleBtn.className = "mini-btn " + (isPaid ? "pay-unmark" : "pay-mark");
-      toggleBtn.textContent = isPaid ? "Mark Unpaid" : "Mark Paid";
-      toggleBtn.addEventListener("click", () => setPaymentStatus_(g, isPaid ? "unpaid" : "paid", toggleBtn));
-      actionsCell.appendChild(toggleBtn);
-
-      tbody.appendChild(tr);
-    });
-  }
-
-  boot();
-})();
-</script>
-</body>
-</html>
+function escapeHtml_(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
