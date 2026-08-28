@@ -10,7 +10,7 @@
 <!-- Open Graph tags for link previews (WhatsApp, Facebook, etc.) -->
 <meta property="og:title" content="Benson & Precious | October 10, 2026">
 <meta property="og:description" content="Join us as we celebrate the wedding of Benson & Precious — October 10, 2026, Delta Hotels City Center, Doha, Qatar. Color Pallete: Burgundy, Rose gold & Champagne. Strictly NO ivory and white.">
-<meta property="og:image" content="https://benflya.online/images/couple.jpg">
+<meta property="og:image" content="https://benflya.online/images/rsvp.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://benflya.online/">
@@ -18,7 +18,10 @@
 
 <!-- Twitter/X card (some apps use this fallback) -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://benflya.online/images/couple.jpg">
+<meta name="twitter:image" content="https://benflya.online/images/rsvp.png">
+
+<!-- Preload hero image for fastest LCP -->
+<link rel="preload" as="image" href="images/hero.jpg" fetchpriority="high">
 
 <!-- ============================================================
      CONFIG — edit these values for your own wedding
@@ -360,6 +363,14 @@
     .prog-name{padding-left:10px}
   }
 
+  /* Extra-small phones: keep countdown from overflowing */
+  @media (max-width:400px){
+    .countdown{gap:6px}
+    .cd-cell{min-width:56px;padding:12px 4px 10px}
+    .cd-num{font-size:1.4rem}
+    .cd-sep{padding-bottom:16px}
+  }
+
   @media (prefers-reduced-motion: reduce){
     html{scroll-behavior:auto}
     *,*::before,*::after{animation-duration:.001s !important;animation-iteration-count:1 !important;transition-duration:.001s !important}
@@ -397,13 +408,23 @@
     <a href="#schedule">Program</a>
     <a href="#gallery">Gallery</a>
     <a href="#faq">FAQ</a>
-    <a href="#" class="nav-cta" data-wa target="_blank" rel="noopener">RSVP</a>
+    <a href="#rsvp" class="nav-cta">RSVP</a>
   </div>
 </nav>
 
 <!-- ================= HERO ================= -->
 <header class="hero" id="home">
-  <div class="hero-media" aria-label="Hero image"><img src="images/hero.jpg" alt="Benson &amp; Precious" loading="eager"></div>
+  <div class="hero-media" aria-label="Hero image">
+    <img
+      src="images/hero.jpg"
+      srcset="images/hero-800.jpg 800w, images/hero-1400.jpg 1400w, images/hero-2000.jpg 2000w"
+      sizes="100vw"
+      alt="Benson &amp; Precious"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+      width="2000" height="2500">
+  </div>
   <div class="hero-veil" aria-hidden="true"></div>
   <canvas id="petals" aria-hidden="true"></canvas>
 
@@ -432,7 +453,7 @@
     <p class="cd-note reveal" style="--d:.9s" id="cdNote">…counting every heartbeat until “I do.”</p>
 
     <div class="hero-ctas reveal" style="--d:1s">
-      <a class="btn btn-solid" href="https://api.whatsapp.com/send?phone=97455228010&text=Hello%20Benson%20%26%20Precious%21%20%F0%9F%92%8D%0AHere%20is%20my%20RSVP%20for%20Saturday%2C%20October%2010%2C%202026%3A%0A%0A%E2%80%A2%20My%20name%20is%3A%20%0A%E2%80%A2%20Attending%20%28yes%20%2F%20no%29%3A%20%0A%E2%80%A2%20Guests%20in%20my%20party%3A%20%0A%E2%80%A2%20Dietary%20needs%3A%20%0A%E2%80%A2%20A%20song%20that%20gets%20me%20dancing%3A%20%0A%E2%80%A2%20A%20note%20for%20the%20couple%3A%20%0A%0ASee%20you%20at%20Delta%20Hotels%20City%20Center%2C%20Doha%21%20%E2%9C%A8" data-wa target="_blank" rel="noopener">RSVP with Love</a>
+      <a class="btn btn-solid" href="#rsvp">RSVP with Love</a>
       <a class="btn btn-ghost on-dark" href="#schedule" style="border-color:var(--rose-400)">View Program</a>
     </div>
   </div>
@@ -509,7 +530,7 @@
     </header>
 
     <figure class="venue-feature reveal">
-      <img data-canva-replaceable="true" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1c11e066e-fb00-4ba7-8e55-aaec23049517.png" alt="The ballroom at Delta Hotels City Center Doha — draped stage, crystal chandeliers, burgundy tables and a column of caramel roses" loading="lazy">
+      <img src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1c11e066e-fb00-4ba7-8e55-aaec23049517.png" alt="The ballroom at Delta Hotels City Center Doha — draped stage, crystal chandeliers, burgundy tables and a column of caramel roses" loading="lazy">
       <figcaption>
         <span>The ballrooms, dressed in maroon swags, cream drapes &amp; crystal light.</span>
         <b>Delta Hotels City Center</b>
@@ -635,17 +656,17 @@
 
     <div class="gallery" id="galleryGrid">
       <figure class="gal-item has-img reveal"><img class="gallery-photo" src="images/gallery-hall.jpg" alt="Precious" loading="lazy"><figcaption class="gal-cap">Precious</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.06s"><img data-canva-replaceable="true" class="gallery-photo ar-45" src="images/couple.jpg" alt="The Couple" loading="lazy"><figcaption class="gal-cap">The Couple</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.06s"><img class="gallery-photo ar-45" src="images/couple.jpg" alt="The Couple" loading="lazy"><figcaption class="gal-cap">The Couple</figcaption></figure>
       <figure class="gal-item has-img reveal" style="--d:.06s">
-  <img data-canva-replaceable="true" class="gallery-photo ar-45" src="images/Benson.png" alt="Benson" loading="lazy">
+  <img class="gallery-photo ar-45" src="images/Benson.png" alt="Benson" loading="lazy">
   <figcaption class="gal-cap">Benson</figcaption>
 </figure>
-      <figure class="gal-item has-img reveal" style="--d:.12s"><img data-canva-replaceable="true" class="ar-34" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/12a566b0e-c4b0-434f-8196-847bc6460a87.png" alt="Wedding rings on burgundy silk" loading="lazy"><figcaption class="gal-cap">The Rings</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.06s"><img data-canva-replaceable="true" class="ar-43" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1cd882175-a275-4db5-a5fb-6818b2eb7f88.png" alt="Doha West Bay skyline at dusk" loading="lazy"><figcaption class="gal-cap">The City</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.12s"><img data-canva-replaceable="true" class="ar-11" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1f31d360e-6f35-421e-a6f4-cdb0b12b3f9b.png" alt="Bridal bouquet of burgundy and caramel roses" loading="lazy"><figcaption class="gal-cap">The Bouquet</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.18s"><img data-canva-replaceable="true" class="ar-45" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1ee624e08-2f53-47fd-b338-8551ec7a17bb.png" alt="Reception table with candles and roses" loading="lazy"><figcaption class="gal-cap">The Table</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.12s"><img data-canva-replaceable="true" class="ar-34" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/17e8c0f8d-1beb-470e-a63f-b18c27da6baf.png" alt="Two-tier burgundy and blush wedding cake" loading="lazy"><figcaption class="gal-cap">The Cake</figcaption></figure>
-      <figure class="gal-item has-img reveal" style="--d:.18s"><img data-canva-replaceable="true" class="ar-45" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1bab539bd-74c0-425e-89b0-8ea7812cc1e6.png" alt="Burgundy rose and pampas floral arch" loading="lazy"><figcaption class="gal-cap">The Roses</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.12s"><img class="ar-34" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/12a566b0e-c4b0-434f-8196-847bc6460a87.png" alt="Wedding rings on burgundy silk" loading="lazy"><figcaption class="gal-cap">The Rings</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.06s"><img class="ar-43" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1cd882175-a275-4db5-a5fb-6818b2eb7f88.png" alt="Doha West Bay skyline at dusk" loading="lazy"><figcaption class="gal-cap">The City</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.12s"><img class="ar-11" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1f31d360e-6f35-421e-a6f4-cdb0b12b3f9b.png" alt="Bridal bouquet of burgundy and caramel roses" loading="lazy"><figcaption class="gal-cap">The Bouquet</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.18s"><img class="ar-45" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1ee624e08-2f53-47fd-b338-8551ec7a17bb.png" alt="Reception table with candles and roses" loading="lazy"><figcaption class="gal-cap">The Table</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.12s"><img class="ar-34" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/17e8c0f8d-1beb-470e-a63f-b18c27da6baf.png" alt="Two-tier burgundy and blush wedding cake" loading="lazy"><figcaption class="gal-cap">The Cake</figcaption></figure>
+      <figure class="gal-item has-img reveal" style="--d:.18s"><img class="ar-45" src="https://image.qwenlm.ai/public_source/eae6b0ee-7ad4-4a2f-9ffd-2280a03a0202/1bab539bd-74c0-425e-89b0-8ea7812cc1e6.png" alt="Burgundy rose and pampas floral arch" loading="lazy"><figcaption class="gal-cap">The Roses</figcaption></figure>
     </div>
   </div>
 </section>
@@ -666,6 +687,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
         <form id="rsvpForm" class="rsvp-form">
           <label>Full name<input required name="name" autocomplete="name" placeholder="Your full name"></label>
           <label>Email address<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>
+          <label>Phone number<input required type="tel" name="phone" autocomplete="tel" placeholder="+974 XXXX XXXX"></label>
           <label>Will you attend?
             <select required name="attending"><option value="">Select</option><option value="yes">Yes — joyfully</option><option value="no">No — regretfully</option></select>
           </label>
@@ -674,7 +696,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
           <label>Dietary needs / allergies<textarea name="dietary" rows="2" placeholder="Optional"></textarea></label>
           <label>Message for the couple<textarea name="message" rows="3" placeholder="Optional"></textarea></label>
           <button class="btn btn-solid" type="submit">Submit RSVP ✦</button>
-          <a class="btn btn-ghost" data-wa target="_blank" rel="noopener">WhatsApp the couple</a>
+          <a class="btn btn-ghost" data-wa target="_blank" rel="noopener">RSVP the Couple</a>
           <p id="rsvpStatus" class="rsvp-status" role="status" aria-live="polite"></p>
           <div id="rsvpQr" class="rsvp-qr" hidden></div>
         </form>
@@ -707,7 +729,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
       </div>
       <div class="faq-item reveal" style="--d:.1s">
         <button class="faq-q" aria-expanded="false">Which ballroom do I go to?<span class="fx">+</span></button>
-        <div class="faq-a"><div><p>Ballroom 1 hosts the arrival, welcome toast, ceremony and cake cutting (12:00–13:45 hrs). From 14:30 hrs everything moves to Ballroom 2 for the MC, bridal team entrance, dinner buffet, program and present presentation, ending with the couple’s exit at 21:00 hrs</p></div></div>
+        <div class="faq-a"><div><p>Ballroom 1 hosts the arrival, welcome toast, ceremony and cake cutting (12:00–13:45 hrs). From 14:30 hrs everything moves to Ballroom 2 for the MC, bridal team entrance, dinner buffet, program and present presentation, ending with the couple's exit at 21:00 hrs</p></div></div>
       </div>
       <div class="faq-item reveal" style="--d:.15s">
         <button class="faq-q" aria-expanded="false">What is the dress code?<span class="fx">+</span></button>
@@ -715,7 +737,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
       </div>
       <div class="faq-item reveal" style="--d:.2s">
         <button class="faq-q" aria-expanded="false">Is parking available at the venue?<span class="fx">+</span></button>
-        <div class="faq-a"><div><p>Yes — complimentary valet is available at Delta Hotels City Center. The hotel is also a short taxi ride from Doha’s Corniche and City Center metro areas.</p></div></div>
+        <div class="faq-a"><div><p>Yes — complimentary valet is available at Delta Hotels City Center. The hotel is also a short taxi ride from Doha's Corniche and City Center metro areas.</p></div></div>
       </div>
     </div>
   </div>
@@ -729,7 +751,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   <p class="f-tag" id="hashtag">#BensonAndPrecious2026</p>
   <p class="f-tagline" data-bind="tagline">Elegance of Excellence</p>
   <nav class="f-nav" aria-label="Footer">
-    <a href="#story">Story</a><a href="#details">Details</a><a href="#schedule">Program</a><a href="#gallery">Gallery</a><a href="https://api.whatsapp.com/send?phone=97455228010&text=Hello%20Benson%20%26%20Precious%21%20%F0%9F%92%8D%0AHere%20is%20my%20RSVP%20for%20Saturday%2C%20October%2010%2C%202026%3A%0A%0A%E2%80%A2%20My%20name%20is%3A%20%0A%E2%80%A2%20Attending%20%28yes%20%2F%20no%29%3A%20%0A%E2%80%A2%20Guests%20in%20my%20party%3A%20%0A%E2%80%A2%20Dietary%20needs%3A%20%0A%E2%80%A2%20A%20song%20that%20gets%20me%20dancing%3A%20%0A%E2%80%A2%20A%20note%20for%20the%20couple%3A%20%0A%0ASee%20you%20at%20Delta%20Hotels%20City%20Center%2C%20Doha%21%20%E2%9C%A8" data-wa target="_blank" rel="noopener">RSVP</a><a href="#faq">FAQ</a>
+    <a href="#story">Story</a><a href="#details">Details</a><a href="#schedule">Program</a><a href="#gallery">Gallery</a><a href="#rsvp">RSVP</a><a href="#faq">FAQ</a>
   </nav>
   <p class="f-small">GEN 21:1 · And the LORD did for Benson &amp; Precious as He had promised</p>
 </footer>
@@ -738,7 +760,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 <div class="lb" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
   <button class="lb-btn lb-close" id="lbClose" aria-label="Close">✕</button>
   <button class="lb-btn lb-prev" id="lbPrev" aria-label="Previous photo">←</button>
-  <img data-canva-replaceable="true" id="lbImg" src="" alt="">
+  <img id="lbImg" src="" alt="">
   <p class="lb-cap" id="lbCap"></p>
   <button class="lb-btn lb-next" id="lbNext" aria-label="Next photo">→</button>
 </div>
@@ -943,13 +965,17 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   }
 
   /* ---------- Calendar: Google Calendar + downloadable ICS ---------- */
-  function pad(n){ return String(n).padStart(2, "0"); }
+  function padICS(n){ return String(n).padStart(2, "0"); }
   function icsDate(d){
-    return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+
-      "T"+pad(d.getUTCHours())+pad(d.getUTCMinutes())+"00Z";
+    return d.getUTCFullYear()+padICS(d.getUTCMonth()+1)+padICS(d.getUTCDate())+
+      "T"+padICS(d.getUTCHours())+padICS(d.getUTCMinutes())+"00Z";
   }
   function icsEscape(value){
     return String(value || "").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+  }
+  function gcalDate(d){
+    return d.getUTCFullYear()+padICS(d.getUTCMonth()+1)+padICS(d.getUTCDate())+
+      "T"+padICS(d.getUTCHours())+padICS(d.getUTCMinutes())+padICS(d.getUTCSeconds())+"Z";
   }
   function downloadICS(){
     var A = CONFIG.partnerA || "Benson", B = CONFIG.partnerB || "Precious";
@@ -976,9 +1002,11 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   }
   function googleCalendarURL(){
     var A = CONFIG.partnerA || "Benson", B = CONFIG.partnerB || "Precious";
+    var start = new Date(target.getTime());
+    var end = new Date(target.getTime() + 8 * 3600 * 1000);
     var params = new URLSearchParams({
       action:"TEMPLATE", text:"Wedding of " + A + " & " + B,
-      dates:"20261010T130000/20261010T210000", ctz:"Asia/Qatar",
+      dates: gcalDate(start) + "/" + gcalDate(end),
       location:CONFIG.venueCeremony || "Delta Hotels City Center, Doha, Qatar",
       details:"Doors 12:00 · Ceremony 13:00 (Ballroom 1) · Reception from 14:30 (Ballroom 2). " + (CONFIG.tagline || "")
     });
@@ -994,3 +1022,4 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 </script>
 </body>
 </html>
+
