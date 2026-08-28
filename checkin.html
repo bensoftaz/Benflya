@@ -9,7 +9,8 @@
   // Same Apps Script Web App URL used by the main site.
   const API_URL = "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
 
-  // Payment details image hosted on the site — sent via email + linked in WhatsApp message.
+  // Payment details image hosted on the site. Referenced here for admin visibility;
+  // the actual email attachment/link is built server-side in the Apps Script "sendPayment" action.
   const PAYMENT_IMAGE_URL = "https://benflya.online/images/payment-details.png";
 
   // Soft access gate — NOT real security (visible to anyone who views page
@@ -117,7 +118,11 @@
   .table-wrap{max-height:460px; overflow:auto;}
   .empty-note{text-align:center; padding:20px; color:#888; font-size:0.85rem;}
 
+  .action-cell{white-space:normal;}
   .row-actions{display:flex; gap:6px; flex-wrap:nowrap;}
+  .send-status{font-size:0.68rem; margin-top:4px; font-weight:600;}
+  .send-status.send-ok{color:#1f4d2e;}
+  .send-status.send-err{color:#b02a2a;}
   .mini-btn{
     padding:6px 10px; border-radius:6px; border:none; font-size:0.7rem; font-weight:700;
     cursor:pointer; white-space:nowrap;
@@ -399,33 +404,33 @@
     return "<span class='pill pill-nodetails'>No Details Found</span>";
   }
 
-  function buildWhatsAppLink_(guest){
-    const phone = String(guest.Phone || "").replace(/\D/g, "");
-    const name = guest.Name || "there";
+  // Sends Email #2 (payment details) automatically from the Apps Script backend —
+  // no WhatsApp tab, no manual step for the admin. Requires an "action=sendPayment"
+  // handler server-side that emails the guest and returns { status: "success" | "error", email }.
+  async function sendPaymentInfo_(guest, btn, statusEl){
     const guestId = guest.GuestId || guest["Guest ID"] || "";
-    const msg =
-      "Hello " + name + "! 💍\n" +
-      "Here are the payment details for your RSVP to Benson & Precious' wedding:\n\n" +
-      PAYMENT_IMAGE_URL + "\n\n" +
-      "Please use your Guest ID as the payment reference: " + guestId + "\n" +
-      "Amount: QAR 130\n\n" +
-      "Thank you! Once we confirm your payment, your QR wedding pass will follow. ✨";
-    const base = phone ? "https://wa.me/" + phone : "https://api.whatsapp.com/send";
-    return base + "?text=" + encodeURIComponent(msg);
-  }
-
-  async function sendPaymentInfo_(guest, btn){
+    const guestEmail = guest.Email || "";
     if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
-    // Trigger Email #2 via Apps Script (requires an "action=sendPayment" handler server-side).
+    if (statusEl) { statusEl.textContent = ""; statusEl.className = "send-status"; }
+
+    if (!API_URL || !guestId) {
+      if (statusEl) { statusEl.textContent = "✕ Missing Guest ID — can't send."; statusEl.classList.add("send-err"); }
+      if (btn) { btn.disabled = false; btn.textContent = "Send Payment Info"; }
+      return;
+    }
+
     try {
-      if (API_URL) {
-        await fetch(API_URL + "?action=sendPayment&id=" + encodeURIComponent(guest.GuestId || guest["Guest ID"] || ""));
+      const res = await fetch(API_URL + "?action=sendPayment&id=" + encodeURIComponent(guestId));
+      const data = await res.json();
+      if (data && data.status === "success") {
+        const sentTo = data.email || guestEmail || "guest";
+        if (statusEl) { statusEl.textContent = "✓ Sent to " + sentTo; statusEl.classList.add("send-ok"); }
+      } else {
+        throw new Error((data && data.message) || "Unknown error");
       }
     } catch (err) {
-      // Email trigger failing shouldn't block the WhatsApp fallback below.
+      if (statusEl) { statusEl.textContent = "✕ Couldn't send — try again."; statusEl.classList.add("send-err"); }
     }
-    // Always open WhatsApp with the payment details pre-filled, as a direct channel too.
-    window.open(buildWhatsAppLink_(guest), "_blank", "noopener");
     if (btn) { btn.disabled = false; btn.textContent = "Send Payment Info"; }
   }
 
@@ -475,15 +480,16 @@
         "<td>" + (plusOne ? "Yes" : "—") + "</td>" +
         "<td><span class='pill " + (checkedIn ? "pill-checked" : "pill-notchecked") + "'>" + (checkedIn ? "Checked In" : "Not Yet") + "</span></td>" +
         "<td>" + paymentPill_(payStatus) + "</td>" +
-        "<td class='row-actions'></td>";
+        "<td class='action-cell'><div class='row-actions'></div><div class='send-status'></div></td>";
 
       const actionsCell = tr.querySelector(".row-actions");
+      const statusEl = tr.querySelector(".send-status");
 
       const sendBtn = document.createElement("button");
       sendBtn.className = "mini-btn pay-send";
       sendBtn.textContent = "Send Payment Info";
-      sendBtn.title = "Emails payment details and opens WhatsApp with the reference pre-filled";
-      sendBtn.addEventListener("click", () => sendPaymentInfo_(g, sendBtn));
+      sendBtn.title = "Automatically emails payment details to the guest";
+      sendBtn.addEventListener("click", () => sendPaymentInfo_(g, sendBtn, statusEl));
       actionsCell.appendChild(sendBtn);
 
       const toggleBtn = document.createElement("button");
