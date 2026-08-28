@@ -9,6 +9,9 @@
   // Same Apps Script Web App URL used by the main site.
   const API_URL = "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec";
 
+  // Payment details image hosted on the site — sent via email + linked in WhatsApp message.
+  const PAYMENT_IMAGE_URL = "https://benflya.online/images/payment-details.png";
+
   // Soft access gate — NOT real security (visible to anyone who views page
   // source). Fine for keeping ushers/admin on the right screen at the venue.
   const CREDENTIALS = {
@@ -89,27 +92,40 @@
   #counter b{color:var(--cream); font-size:1.1rem;}
 
   /* Admin dashboard */
-  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; width:100%; max-width:640px; margin-bottom:16px;}
+  .stat-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; width:100%; max-width:780px; margin-bottom:16px;}
   .stat-box{background:var(--cream); color:var(--burgundy-800); border-radius:8px; padding:16px 8px; text-align:center;}
   .stat-box .n{font-size:1.6rem; font-weight:800;}
   .stat-box .l{font-size:0.68rem; text-transform:uppercase; letter-spacing:0.5px; color:#7a1f3a;}
 
-  .admin-panel{width:100%; max-width:640px; background:var(--cream); color:var(--ink); border-radius:10px; padding:18px; margin-bottom:16px;}
+  .admin-panel{width:100%; max-width:780px; background:var(--cream); color:var(--ink); border-radius:10px; padding:18px; margin-bottom:16px;}
   .admin-panel h2{color:var(--burgundy-800); font-size:1.05rem; margin-bottom:12px;}
   .search-row{display:flex; gap:8px; margin-bottom:12px;}
   .search-row input{flex:1;}
   .search-row button{padding:0 16px; border-radius:6px; border:none; background:var(--burgundy-800); color:#fff; font-weight:600; cursor:pointer;}
 
-  table{width:100%; border-collapse:collapse; font-size:0.82rem;}
-  th, td{text-align:left; padding:8px 6px; border-bottom:1px solid #eee;}
-  th{color:#7a1f3a; text-transform:uppercase; font-size:0.7rem; letter-spacing:0.4px;}
+  table{width:100%; border-collapse:collapse; font-size:0.8rem;}
+  th, td{text-align:left; padding:8px 6px; border-bottom:1px solid #eee; white-space:nowrap;}
+  th{color:#7a1f3a; text-transform:uppercase; font-size:0.68rem; letter-spacing:0.4px;}
   .pill{display:inline-block; padding:2px 8px; border-radius:20px; font-size:0.7rem; font-weight:700;}
   .pill-yes{background:#dff2e1; color:#1f4d2e;}
   .pill-no{background:#f9dede; color:#5c1616;}
   .pill-checked{background:#dff2e1; color:#1f4d2e;}
   .pill-notchecked{background:#eee; color:#666;}
-  .table-wrap{max-height:420px; overflow:auto;}
+  .pill-paid{background:#dff2e1; color:#1f4d2e;}
+  .pill-unpaid{background:#f9dede; color:#5c1616;}
+  .pill-nodetails{background:#eee; color:#777;}
+  .table-wrap{max-height:460px; overflow:auto;}
   .empty-note{text-align:center; padding:20px; color:#888; font-size:0.85rem;}
+
+  .row-actions{display:flex; gap:6px; flex-wrap:nowrap;}
+  .mini-btn{
+    padding:6px 10px; border-radius:6px; border:none; font-size:0.7rem; font-weight:700;
+    cursor:pointer; white-space:nowrap;
+  }
+  .mini-btn.pay-send{background:#25D366; color:#08240f;}
+  .mini-btn.pay-mark{background:var(--burgundy-800); color:#fff;}
+  .mini-btn.pay-unmark{background:#999; color:#fff;}
+  .mini-btn:disabled{opacity:0.5; cursor:not-allowed;}
 
   .hidden{display:none !important;}
 </style>
@@ -161,6 +177,7 @@
     <div class="stat-box"><div class="n" id="admDeclined">–</div><div class="l">Declined</div></div>
     <div class="stat-box"><div class="n" id="admGuests">–</div><div class="l">Total Guests</div></div>
     <div class="stat-box"><div class="n" id="admCheckedIn">–</div><div class="l">Checked In</div></div>
+    <div class="stat-box"><div class="n" id="admPaid">–</div><div class="l">Paid</div></div>
   </div>
 
   <div class="admin-panel">
@@ -172,7 +189,7 @@
     <div class="table-wrap">
       <table id="admTable">
         <thead>
-          <tr><th>Name</th><th>Attending</th><th>+1</th><th>Checked In</th><th>Time</th></tr>
+          <tr><th>Name</th><th>Attending</th><th>+1</th><th>Checked In</th><th>Payment</th><th>Actions</th></tr>
         </thead>
         <tbody id="admTableBody"></tbody>
       </table>
@@ -355,6 +372,7 @@
       document.getElementById("admDeclined").textContent = data.declined ?? 0;
       document.getElementById("admGuests").textContent = data.totalGuests ?? 0;
       document.getElementById("admCheckedIn").textContent = data.checkedIn ?? 0;
+      document.getElementById("admPaid").textContent = data.paid ?? 0;
     } catch (err) {}
   }
 
@@ -372,6 +390,60 @@
 
   function escapeHtml_(str){ return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
+  // Payment status is read from a "PaymentStatus" field on each guest record.
+  // Expected values: "paid" | "unpaid" | "" (blank/missing = no details found).
+  function paymentPill_(status){
+    const s = String(status || "").toLowerCase();
+    if (s === "paid") return "<span class='pill pill-paid'>Paid</span>";
+    if (s === "unpaid") return "<span class='pill pill-unpaid'>Not Paid</span>";
+    return "<span class='pill pill-nodetails'>No Details Found</span>";
+  }
+
+  function buildWhatsAppLink_(guest){
+    const phone = String(guest.Phone || "").replace(/\D/g, "");
+    const name = guest.Name || "there";
+    const guestId = guest.GuestId || guest["Guest ID"] || "";
+    const msg =
+      "Hello " + name + "! 💍\n" +
+      "Here are the payment details for your RSVP to Benson & Precious' wedding:\n\n" +
+      PAYMENT_IMAGE_URL + "\n\n" +
+      "Please use your Guest ID as the payment reference: " + guestId + "\n" +
+      "Amount: QAR 130\n\n" +
+      "Thank you! Once we confirm your payment, your QR wedding pass will follow. ✨";
+    const base = phone ? "https://wa.me/" + phone : "https://api.whatsapp.com/send";
+    return base + "?text=" + encodeURIComponent(msg);
+  }
+
+  async function sendPaymentInfo_(guest, btn){
+    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+    // Trigger Email #2 via Apps Script (requires an "action=sendPayment" handler server-side).
+    try {
+      if (API_URL) {
+        await fetch(API_URL + "?action=sendPayment&id=" + encodeURIComponent(guest.GuestId || guest["Guest ID"] || ""));
+      }
+    } catch (err) {
+      // Email trigger failing shouldn't block the WhatsApp fallback below.
+    }
+    // Always open WhatsApp with the payment details pre-filled, as a direct channel too.
+    window.open(buildWhatsAppLink_(guest), "_blank", "noopener");
+    if (btn) { btn.disabled = false; btn.textContent = "Send Payment Info"; }
+  }
+
+  async function setPaymentStatus_(guest, newStatus, btn){
+    if (btn) btn.disabled = true;
+    try {
+      if (API_URL) {
+        const id = encodeURIComponent(guest.GuestId || guest["Guest ID"] || "");
+        await fetch(API_URL + "?action=setPayment&id=" + id + "&status=" + newStatus);
+      }
+      guest.PaymentStatus = newStatus;
+      renderTable();
+      loadStats();
+    } catch (err) {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function renderTable(){
     const q = document.getElementById("admSearch").value.trim().toLowerCase();
     const tbody = document.getElementById("admTableBody");
@@ -388,20 +460,40 @@
     }
     emptyNote.classList.add("hidden");
 
-    tbody.innerHTML = filtered.map(g => {
+    tbody.innerHTML = "";
+    filtered.forEach((g, idx) => {
       const attending = String(g.Attending || "").toLowerCase() === "yes";
       const checkedIn = String(g.CheckedIn || "").toLowerCase() === "yes";
       const plusOne = String(g.PlusOne || "").toLowerCase() === "yes";
-      let timeStr = "";
-      if (g.CheckedInTime) { try { timeStr = new Date(g.CheckedInTime).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); } catch(e){ timeStr = ""; } }
-      return "<tr>" +
+      const payStatus = String(g.PaymentStatus || "").toLowerCase();
+      const isPaid = payStatus === "paid";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML =
         "<td>" + escapeHtml_(g.Name || "") + "</td>" +
         "<td><span class='pill " + (attending ? "pill-yes" : "pill-no") + "'>" + (attending ? "Yes" : "No") + "</span></td>" +
         "<td>" + (plusOne ? "Yes" : "—") + "</td>" +
         "<td><span class='pill " + (checkedIn ? "pill-checked" : "pill-notchecked") + "'>" + (checkedIn ? "Checked In" : "Not Yet") + "</span></td>" +
-        "<td>" + escapeHtml_(timeStr) + "</td>" +
-      "</tr>";
-    }).join("");
+        "<td>" + paymentPill_(payStatus) + "</td>" +
+        "<td class='row-actions'></td>";
+
+      const actionsCell = tr.querySelector(".row-actions");
+
+      const sendBtn = document.createElement("button");
+      sendBtn.className = "mini-btn pay-send";
+      sendBtn.textContent = "Send Payment Info";
+      sendBtn.title = "Emails payment details and opens WhatsApp with the reference pre-filled";
+      sendBtn.addEventListener("click", () => sendPaymentInfo_(g, sendBtn));
+      actionsCell.appendChild(sendBtn);
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "mini-btn " + (isPaid ? "pay-unmark" : "pay-mark");
+      toggleBtn.textContent = isPaid ? "Mark Unpaid" : "Mark Paid";
+      toggleBtn.addEventListener("click", () => setPaymentStatus_(g, isPaid ? "unpaid" : "paid", toggleBtn));
+      actionsCell.appendChild(toggleBtn);
+
+      tbody.appendChild(tr);
+    });
   }
 
   boot();
