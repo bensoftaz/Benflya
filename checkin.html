@@ -757,7 +757,7 @@ async function sendPaymentDetails(guestId, button) {
     button.textContent = "Sent";
   } catch (error) {
     console.error("Payment email error:", error);
-    status.textContent = "✕ Couldn't send — try again.";
+    status.textContent = "✕ " + (error && error.message ? error.message : "Couldn't send — try again.");
     status.className = "payment-status error";
     button.textContent = "Send Payment Details";
   } finally {
@@ -785,7 +785,7 @@ async function togglePaymentStatus(guestId, currentStatus, button) {
   } catch (error) {
     console.error("Payment status error:", error);
     if (status) {
-      status.textContent = "✕ Couldn't update — try again.";
+      status.textContent = "✕ " + (error && error.message ? error.message : "Couldn't update — try again.");
       status.className = "payment-status error";
     }
     button.disabled = false;
@@ -799,4 +799,3 @@ boot();
 
 </body>
 </html>
-
