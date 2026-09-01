@@ -10,7 +10,7 @@
 <!-- Open Graph tags for link previews (WhatsApp, Facebook, etc.) -->
 <meta property="og:title" content="Benson & Precious | October 10, 2026">
 <meta property="og:description" content="Join us as we celebrate the wedding of Benson & Precious — October 10, 2026, Delta Hotels City Center, Doha, Qatar. Color Pallete: Burgundy, Rose gold & Champagne. Strictly NO ivory and white.">
-<meta property="og:image" content="https://benflya.online/images/couple.jpg">
+<meta property="og:image" content="https://benflya.online/images/rsvp.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://benflya.online/">
@@ -18,10 +18,10 @@
 
 <!-- Twitter/X card (some apps use this fallback) -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://benflya.online/images/couple.jpg">
+<meta name="twitter:image" content="https://benflya.online/images/rsvp.png">
 
 <!-- Preload hero image for fastest LCP -->
-<link rel="preload" as="image" href="images/Hero.png" fetchpriority="high">
+<link rel="preload" as="image" href="images/hero.jpg" fetchpriority="high">
 
 <!-- ============================================================
      CONFIG — edit these values for your own wedding
@@ -39,7 +39,7 @@
     // WhatsApp number in international format, digits only (no +, no spaces),
     // e.g. "97455123456". Leave blank to use WhatsApp share.
     whatsappNumber: "97455228010",
-    RSVP_API_URL: "https://script.google.com/macros/s/AKfycbzsvci6J14JeS7Rw1WNTI3W94R7Dp-zteZZst1YA5yLeFBrXJc53lzKgPPKQ1rlaWwg/exec", // Google Apps Script Web App URL ending in /exec
+    RSVP_API_URL: "https://script.google.com/macros/s/AKfycbzuSfCOFqIAVA5tVGPUptanZoDTzYz4PFIksclLh7KyITbZpRNP-oBHk6r9eaMeWDBJ/exec", // Google Apps Script Web App URL ending in /exec
     CHECKIN_URL: "", // optional public URL for check-in page
     ADMIN_LOGIN_ENABLED: true,
   };
@@ -89,7 +89,7 @@
   }
 
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
+  html{scroll-behavior:smooth;overflow-x:hidden;width:100%}
   body{
     font-family:var(--sans);
     font-weight:300;
@@ -97,6 +97,7 @@
     background:var(--cream-50);
     line-height:1.7;
     overflow-x:hidden;
+    width:100%;
     -webkit-font-smoothing:antialiased;
   }
   img{max-width:100%;display:block}
@@ -416,7 +417,7 @@
 <header class="hero" id="home">
   <div class="hero-media" aria-label="Hero image">
     <img
-      src="images/Hero.png"
+      src="images/hero.jpg"
       srcset="images/hero-800.jpg 800w, images/hero-1400.jpg 1400w, images/hero-2000.jpg 2000w"
       sizes="100vw"
       alt="Benson &amp; Precious"
@@ -692,7 +693,9 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
             <select required name="attending"><option value="">Select</option><option value="yes">Yes — joyfully</option><option value="no">No — regretfully</option></select>
           </label>
           <label>Guests in your party<input required type="number" min="0" max="10" name="partySize" value="0"></label>
-          <label>Plus-one name (if applicable)<input name="plusOneName" placeholder="Optional"></label>
+          <label>Children age 5+ (half price)<input type="number" min="0" max="10" name="kidsCount" value="0"></label>
+          <label>Children under 5 (complimentary)<input type="number" min="0" max="10" name="infantsCount" value="0"></label>
+          <label class="rsvp-full full-width">Names of additional guests (one per line, if your party is more than just you)<textarea name="plusOneName" rows="2" placeholder="e.g.&#10;Maria Chikwanha&#10;John Dube"></textarea></label>
           <label>Dietary needs / allergies<textarea name="dietary" rows="2" placeholder="Optional"></textarea></label>
           <label>Message for the couple<textarea name="message" rows="3" placeholder="Optional"></textarea></label>
           <button class="btn btn-solid" type="submit">Submit RSVP ✦</button>
@@ -812,6 +815,8 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
       var fd=new FormData(rsvpForm), data={};
       fd.forEach(function(v,k){ data[k]=v; });
       data.partySize=Number(data.partySize||0);
+      data.kidsCount=Number(data.kidsCount||0);
+      data.infantsCount=Number(data.infantsCount||0);
       rsvpStatus.textContent="Submitting your RSVP…";
       try{
         var res=await fetch(CONFIG.RSVP_API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)});
@@ -1022,4 +1027,3 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 </script>
 </body>
 </html>
-
