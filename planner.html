@@ -15,7 +15,8 @@ const API_URL =
 const CREDENTIALS = {
   EventsC01: { password: "Bernadette", role: "planner", label: "Usher C01" },
   EventsC02: { password: "Memory", role: "planner", label: "Usher C02" },
-  Admin: { password: "Admin", role: "planner", label: "Administrator" }
+  Admin: { password: "Admin", role: "planner", label: "Administrator" },
+  EventsC03: { password: "", role: "viewonly", label: "Viewer (EventsC03)" }
 };
 
 const SESSION_KEY = "bp_planner_session";
@@ -147,8 +148,8 @@ button { cursor: pointer; }
 <section id="plannerScreen" class="app hidden">
   <header class="app-header">
     <div class="brand">
-      <h1>BenFlya Checklist</h1>
-      <p>Welcome <strong id="plannerWho">User</strong></p>
+      <h1>Wedding Countdown Checklist</h1>
+      <p>Signed in as <strong id="plannerWho">User</strong></p>
     </div>
     <div style="display:flex;gap:8px;">
       <button id="plannerRefresh" class="small-btn" type="button">Refresh</button>
@@ -164,6 +165,14 @@ button { cursor: pointer; }
     <div class="countdown-item" id="finalRuleItem">
       <div class="n" id="daysToFinalRule">–</div>
       <div class="l">Days to "Everything Confirmed" Deadline (Oct 3)</div>
+    </div>
+    <div class="countdown-item">
+      <div class="n" id="rsvpGuestCount">–</div>
+      <div class="l">RSVP Count (guests)</div>
+    </div>
+    <div class="countdown-item">
+      <div class="n" id="confirmedGuestCount">–</div>
+      <div class="l">Guests Confirmed (Paid)</div>
     </div>
   </div>
 
@@ -215,8 +224,8 @@ function getSession() {
   try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
   catch (error) { return null; }
 }
-function setSession(username, label) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, label }));
+function setSession(username, label, role) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, label, role }));
 }
 function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
 
@@ -228,9 +237,11 @@ function showScreen(screen) {
 async function boot() {
   const session = getSession();
   if (!session) { showScreen("login"); return; }
+  window.__isViewOnly = session.role === "viewonly";
   $("plannerWho").textContent = session.label;
   showScreen("planner");
   await loadTasks();
+  await loadGuestStats();
 }
 
 $("loginBtn").addEventListener("click", login);
@@ -246,7 +257,7 @@ async function login() {
     return;
   }
   $("loginError").style.display = "none";
-  setSession(match, entry.label);
+  setSession(match, entry.label, entry.role);
   $("loginUser").value = ""; $("loginPass").value = "";
   await boot();
 }
@@ -276,6 +287,16 @@ setInterval(updateCountdowns, 60000);
 /* ---------------- Tasks ---------------- */
 
 let allTasks = [];
+
+async function loadGuestStats() {
+  try {
+    const data = await apiGet("stats");
+    $("rsvpGuestCount").textContent = Number(data.totalGuests || 0);
+    $("confirmedGuestCount").textContent = Number(data.confirmedGuests || 0);
+  } catch (error) {
+    console.error("Guest stats error:", error);
+  }
+}
 
 async function loadTasks() {
   try {
