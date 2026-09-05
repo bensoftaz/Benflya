@@ -353,18 +353,19 @@ function renderSections() {
     let rowsHtml = "";
     tasks.forEach(task => {
       const overdue = isOverdue(task);
+      const readOnly = window.__isViewOnly ? "disabled" : "";
       const tbaBadge = task.isTba
         ? `<span class="tba-badge${overdue ? " overdue" : ""}">${overdue ? "Overdue" : "TBA"}</span>`
         : "";
       const tbaFields = task.isTba ? `
         <div class="tba-fields">
-          <input type="text" placeholder="Assigned to" value="${escapeHtml(task.assignedTo)}" data-assign-id="${escapeHtml(task.taskId)}">
-          <input type="date" value="${escapeHtml(task.deadline)}" data-deadline-id="${escapeHtml(task.taskId)}">
+          <input type="text" placeholder="Assigned to" value="${escapeHtml(task.assignedTo)}" data-assign-id="${escapeHtml(task.taskId)}" ${readOnly}>
+          <input type="date" value="${escapeHtml(task.deadline)}" data-deadline-id="${escapeHtml(task.taskId)}" ${readOnly}>
         </div>` : "";
 
       rowsHtml += `
         <div class="task-row">
-          <input type="checkbox" class="task-check" ${task.done ? "checked" : ""} data-task-id="${escapeHtml(task.taskId)}">
+          <input type="checkbox" class="task-check" ${task.done ? "checked" : ""} data-task-id="${escapeHtml(task.taskId)}" ${readOnly}>
           <div class="task-body">
             <span class="task-text${task.done ? " done" : ""}">${escapeHtml(task.text)}</span>${tbaBadge}
             ${tbaFields}
