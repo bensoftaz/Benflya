@@ -23,7 +23,9 @@ const SESSION_KEY = "bp_planner_session";
 const WEDDING_DATE = "2026-10-10T13:00:00+03:00";
 const FINAL_RULE_DATE = "2026-10-03T23:59:59+03:00";
 
-const SECTION_ORDER = ["4 Weeks To Go", "3 Weeks To Go", "2 Weeks To Go", "1 Week To Go", "2-3 Days / Eve", "Wedding Day"];
+const DEFAULT_SECTION_ORDER = ["4 Weeks To Go", "3 Weeks To Go", "2 Weeks To Go", "1 Week To Go", "2-3 Days / Eve", "Wedding Day"];
+const ADMIN_USERNAME = "Admin";
+const STORAGE_KEY = "bp_planner_dynamic_v2";
 </script>
 
 <style>
@@ -122,6 +124,41 @@ button { cursor: pointer; }
   .countdown-banner { flex-direction: column; }
   .app-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* Dynamic planner controls */
+.toolbar { width:100%; max-width:900px; margin:0 auto 16px; background:var(--cream); color:var(--ink); border-radius:16px; padding:14px; box-shadow:var(--shadow); }
+.toolbar-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.filter-btn,.action-btn,.icon-btn { border:1px solid var(--border); background:#fff; color:var(--burgundy-800); min-height:38px; padding:8px 12px; border-radius:9px; font-weight:700; }
+.filter-btn.active { background:var(--burgundy-800); color:#fff; border-color:var(--burgundy-800); }
+.action-btn.primary { background:var(--burgundy-800); color:#fff; border-color:var(--burgundy-800); }
+.action-btn.danger { color:var(--red); border-color:#efc3c3; }
+.toolbar input,.toolbar select,.inline-edit { min-height:38px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:#fff; color:var(--ink); }
+.toolbar .search { flex:1; min-width:160px; }
+.admin-panel { display:none; width:100%; max-width:900px; margin:0 auto 16px; background:rgba(201,162,75,.12); border:1px solid rgba(201,162,75,.5); border-radius:16px; padding:14px; }
+.admin-panel.show { display:block; }
+.admin-panel strong { color:var(--gold-light); }
+.section-actions,.task-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.section-actions .action-btn,.task-actions .action-btn { min-height:34px; padding:6px 9px; font-size:12px; }
+.section-empty { padding:18px; text-align:center; color:#75656a; border:1px dashed var(--border); border-radius:10px; }
+.task-row { position:relative; }
+.task-meta { margin-top:6px; font-size:12px; color:#75656a; }
+.comment-toggle { margin-top:8px; }
+.comments-panel { margin-top:10px; padding:12px; background:#fff8f9; border:1px solid var(--border); border-radius:10px; }
+.comment { padding:9px 0; border-bottom:1px solid #eee1e5; font-size:13px; line-height:1.45; }
+.comment:last-child { border-bottom:0; }
+.comment-head { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:#75656a; margin-bottom:4px; }
+.comment-form { display:flex; gap:8px; margin-top:10px; align-items:flex-start; }
+.comment-form textarea { flex:1; min-height:70px; resize:vertical; padding:9px; border:1px solid var(--border); border-radius:8px; font:inherit; }
+.modal-backdrop { position:fixed; inset:0; background:rgba(20,5,10,.6); display:none; align-items:center; justify-content:center; padding:18px; z-index:10000; }
+.modal-backdrop.show { display:flex; }
+.modal { width:min(100%,520px); background:var(--cream); color:var(--ink); border-radius:16px; padding:20px; box-shadow:var(--shadow); }
+.modal h3 { margin:0 0 14px; color:var(--burgundy-800); font-family:Georgia,serif; }
+.modal label { display:block; font-size:12px; font-weight:800; margin:10px 0 5px; }
+.modal input,.modal select,.modal textarea { width:100%; padding:10px; border:1px solid var(--border); border-radius:9px; font:inherit; color:var(--ink); }
+.modal textarea { min-height:90px; resize:vertical; }
+.modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
+@media (max-width:600px){ .toolbar-row,.comment-form { flex-direction:column; align-items:stretch; } .section-header { align-items:flex-start; } .section-actions { width:100%; } .filter-btn,.action-btn { width:100%; } .section-actions .action-btn,.task-actions .action-btn { width:auto; } }
+
 </style>
 </head>
 
@@ -149,7 +186,7 @@ button { cursor: pointer; }
   <header class="app-header">
     <div class="brand">
       <h1>Wedding Countdown Checklist</h1>
-      <p>Welcome <strong id="plannerWho">User</strong></p>
+      <p>Signed in as <strong id="plannerWho">User</strong></p>
     </div>
     <div style="display:flex;gap:8px;">
       <button id="plannerRefresh" class="small-btn" type="button">Refresh</button>
@@ -182,6 +219,28 @@ button { cursor: pointer; }
     <div class="progress-label" id="overallLabel">0 of 0 tasks complete</div>
   </div>
 
+
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <button class="filter-btn active" data-filter="all" type="button">All</button>
+      <button class="filter-btn" data-filter="pending" type="button">Pending</button>
+      <button class="filter-btn" data-filter="completed" type="button">Completed</button>
+      <button class="filter-btn" data-filter="current" type="button">Current Section</button>
+      <button class="filter-btn" data-filter="tba" type="button">TBA</button>
+      <button class="filter-btn" data-filter="overdue" type="button">Overdue</button>
+      <input id="taskSearch" class="search" type="search" placeholder="Search tasks...">
+      <select id="sectionFilter"><option value="">All checklists</option></select>
+    </div>
+  </div>
+
+  <div id="adminPanel" class="admin-panel">
+    <div class="toolbar-row">
+      <strong>Administrator Management</strong>
+      <button id="addSectionBtn" class="action-btn primary" type="button">+ Add Checklist</button>
+      <button id="manageToggle" class="action-btn" type="button">Management: On</button>
+    </div>
+  </div>
+
   <div class="container" id="sectionsContainer"></div>
 </section>
 
@@ -190,250 +249,52 @@ button { cursor: pointer; }
 <script>
 (function(){
 "use strict";
-
-const $ = id => document.getElementById(id);
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
-
-function showToast(message) {
-  const toast = $("toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(window.__toastTimer);
-  window.__toastTimer = setTimeout(() => toast.classList.remove("show"), 3500);
-}
-
-function apiUrl(action, params = {}) {
-  const query = new URLSearchParams({ action, ...params });
-  return API_URL + "?" + query.toString();
-}
-
-async function apiGet(action, params = {}) {
-  const response = await fetch(apiUrl(action, params), { method: "GET", cache: "no-store" });
-  if (!response.ok) throw new Error("Server returned HTTP " + response.status);
-  const text = await response.text();
-  try { return JSON.parse(text); }
-  catch (error) { throw new Error("Invalid response from server."); }
-}
-
-function getSession() {
-  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null"); }
-  catch (error) { return null; }
-}
-function setSession(username, label, role) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, label, role }));
-}
-function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
-
-function showScreen(screen) {
-  $("loginScreen").classList.toggle("hidden", screen !== "login");
-  $("plannerScreen").classList.toggle("hidden", screen !== "planner");
-}
-
-async function boot() {
-  const session = getSession();
-  if (!session) { showScreen("login"); return; }
-  window.__isViewOnly = session.role === "viewonly";
-  $("plannerWho").textContent = session.label;
-  showScreen("planner");
-  await loadTasks();
-  await loadGuestStats();
-}
-
-$("loginBtn").addEventListener("click", login);
-$("loginPass").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
-
-async function login() {
-  const username = $("loginUser").value.trim();
-  const password = $("loginPass").value;
-  const match = Object.keys(CREDENTIALS).find(key => key.toLowerCase() === username.toLowerCase());
-  const entry = match ? CREDENTIALS[match] : null;
-  if (!entry || entry.password !== password) {
-    $("loginError").style.display = "block";
-    return;
-  }
-  $("loginError").style.display = "none";
-  setSession(match, entry.label, entry.role);
-  $("loginUser").value = ""; $("loginPass").value = "";
-  await boot();
-}
-
-$("plannerLogout").addEventListener("click", () => { clearSession(); location.reload(); });
-$("plannerRefresh").addEventListener("click", () => loadTasks());
-
-/* ---------------- Countdown ---------------- */
-
-function updateCountdowns() {
-  const now = new Date();
-  const wedding = new Date(WEDDING_DATE);
-  const finalRule = new Date(FINAL_RULE_DATE);
-
-  const daysTo = (target) => Math.ceil((target - now) / 86400000);
-
-  const dw = daysTo(wedding);
-  $("daysToWedding").textContent = dw >= 0 ? dw : "0";
-
-  const df = daysTo(finalRule);
-  $("daysToFinalRule").textContent = df >= 0 ? df : "Overdue";
-  $("finalRuleItem").classList.toggle("overdue", df < 0);
-}
-updateCountdowns();
-setInterval(updateCountdowns, 60000);
-
-/* ---------------- Tasks ---------------- */
-
-let allTasks = [];
-
-async function loadGuestStats() {
-  try {
-    const data = await apiGet("stats");
-    $("rsvpGuestCount").textContent = Number(data.totalGuests || 0);
-    $("confirmedGuestCount").textContent = Number(data.confirmedGuests || 0);
-  } catch (error) {
-    console.error("Guest stats error:", error);
-  }
-}
-
-async function loadTasks() {
-  try {
-    const data = await apiGet("listTasks");
-    allTasks = Array.isArray(data.tasks) ? data.tasks : [];
-    renderSections();
-  } catch (error) {
-    console.error("Load tasks error:", error);
-    showToast("Couldn't load the checklist.");
-  }
-}
-
-function isOverdue(task) {
-  if (task.done) return false;
-  const now = new Date();
-  if (task.deadline) {
-    const d = new Date(task.deadline + "T23:59:59");
-    return now > d;
-  }
-  if (task.isTba) return now > new Date(FINAL_RULE_DATE);
-  return false;
-}
-
-function currentSectionName() {
-  // Rough heuristic: which section's deadline window we're inside, based on
-  // days remaining to the wedding. Purely a visual highlight, not stored data.
-  const days = Math.ceil((new Date(WEDDING_DATE) - new Date()) / 86400000);
-  if (days > 21) return "4 Weeks To Go";
-  if (days > 14) return "3 Weeks To Go";
-  if (days > 7) return "2 Weeks To Go";
-  if (days > 3) return "1 Week To Go";
-  if (days >= 0) return "2-3 Days / Eve";
-  return "Wedding Day";
-}
-
-function renderSections() {
-  const container = $("sectionsContainer");
-  container.innerHTML = "";
-
-  let totalDone = 0, totalTasks = allTasks.length;
-  const current = currentSectionName();
-
-  SECTION_ORDER.forEach(sectionName => {
-    const tasks = allTasks.filter(t => t.section === sectionName);
-    if (!tasks.length) return;
-
-    const doneCount = tasks.filter(t => t.done).length;
-    totalDone += doneCount;
-    const pct = Math.round((doneCount / tasks.length) * 100);
-
-    const card = document.createElement("div");
-    card.className = "section-card" + (sectionName === current ? " current" : "");
-
-    let rowsHtml = "";
-    tasks.forEach(task => {
-      const overdue = isOverdue(task);
-      const readOnly = window.__isViewOnly ? "disabled" : "";
-      const tbaBadge = task.isTba
-        ? `<span class="tba-badge${overdue ? " overdue" : ""}">${overdue ? "Overdue" : "TBA"}</span>`
-        : "";
-      const tbaFields = task.isTba ? `
-        <div class="tba-fields">
-          <input type="text" placeholder="Assigned to" value="${escapeHtml(task.assignedTo)}" data-assign-id="${escapeHtml(task.taskId)}" ${readOnly}>
-          <input type="date" value="${escapeHtml(task.deadline)}" data-deadline-id="${escapeHtml(task.taskId)}" ${readOnly}>
-        </div>` : "";
-
-      rowsHtml += `
-        <div class="task-row">
-          <input type="checkbox" class="task-check" ${task.done ? "checked" : ""} data-task-id="${escapeHtml(task.taskId)}" ${readOnly}>
-          <div class="task-body">
-            <span class="task-text${task.done ? " done" : ""}">${escapeHtml(task.text)}</span>${tbaBadge}
-            ${tbaFields}
-          </div>
-        </div>`;
-    });
-
-    card.innerHTML = `
-      <div class="section-header">
-        <h2>${escapeHtml(sectionName)}</h2>
-        ${sectionName === current ? '<span class="section-badge">Current</span>' : ""}
-      </div>
-      <div class="section-progress" style="margin-bottom:6px;">${doneCount} of ${tasks.length} complete</div>
-      <div class="section-bar"><div class="section-bar-fill" style="width:${pct}%"></div></div>
-      ${rowsHtml}
-    `;
-    container.appendChild(card);
-  });
-
-  const overallPct = totalTasks ? Math.round((totalDone / totalTasks) * 100) : 0;
-  $("overallFill").style.width = overallPct + "%";
-  $("overallLabel").textContent = totalDone + " of " + totalTasks + " tasks complete";
-
-  container.querySelectorAll("[data-task-id]").forEach(cb => {
-    cb.addEventListener("change", () => toggleTask(cb.dataset.taskId, cb.checked));
-  });
-  container.querySelectorAll("[data-assign-id]").forEach(input => {
-    input.addEventListener("change", () => saveTbaField(input.dataset.assignId, "assignedTo", input.value));
-  });
-  container.querySelectorAll("[data-deadline-id]").forEach(input => {
-    input.addEventListener("change", () => saveTbaField(input.dataset.deadlineId, "deadline", input.value));
-  });
-}
-
-async function toggleTask(taskId, done) {
-  const task = allTasks.find(t => t.taskId === taskId);
-  if (task) task.done = done; // optimistic update
-  renderSections();
-  try {
-    const data = await apiGet("toggleTask", { id: taskId, done: done });
-    if (data.status !== "success") throw new Error(data.message || "Could not update task.");
-  } catch (error) {
-    console.error("Toggle task error:", error);
-    showToast("Couldn't save — try again.");
-    await loadTasks();
-  }
-}
-
-async function saveTbaField(taskId, field, value) {
-  const task = allTasks.find(t => t.taskId === taskId);
-  if (!task) return;
-  const assignedTo = field === "assignedTo" ? value : task.assignedTo;
-  const deadline = field === "deadline" ? value : task.deadline;
-  try {
-    const data = await apiGet("updateTask", { id: taskId, assignedTo: assignedTo, deadline: deadline });
-    if (data.status !== "success") throw new Error(data.message || "Could not save.");
-    task.assignedTo = assignedTo;
-    task.deadline = deadline;
-    showToast("Saved.");
-    renderSections();
-  } catch (error) {
-    console.error("Update task error:", error);
-    showToast("Couldn't save — try again.");
-  }
-}
-
-boot();
-
+const $=id=>document.getElementById(id);
+let allTasks=[], sectionOrder=[], activeFilter="all", searchTerm="", selectedSection="", commentsOpen=new Set(), adminManagement=true;
+let dynamic={sections:[],tasks:[],sectionNames:{},deletedTaskIds:[],comments:{}};
+const uid=p=>p+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const escapeHtml=v=>String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+function showToast(message){const t=$("toast");t.textContent=message;t.classList.add("show");clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove("show"),3500)}
+function apiUrl(action,params={}){return API_URL+"?"+new URLSearchParams({action,...params}).toString()}
+async function apiGet(action,params={}){const r=await fetch(apiUrl(action,params),{method:"GET",cache:"no-store"});if(!r.ok)throw new Error("Server returned HTTP "+r.status);const text=await r.text();try{return JSON.parse(text)}catch(e){throw new Error("Invalid response from server.")}}
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}");dynamic={...dynamic,...d,sections:Array.isArray(d.sections)?d.sections:[],tasks:Array.isArray(d.tasks)?d.tasks:[],deletedTaskIds:Array.isArray(d.deletedTaskIds)?d.deletedTaskIds:[],comments:d.comments||{},sectionNames:d.sectionNames||{}}}catch(e){console.warn("Local planner data unavailable",e)}}
+function saveLocal(){localStorage.setItem(STORAGE_KEY,JSON.stringify(dynamic))}
+function getSession(){try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null")}catch(e){return null}}
+function setSession(username,label,role){sessionStorage.setItem(SESSION_KEY,JSON.stringify({username,label,role}))}
+function clearSession(){sessionStorage.removeItem(SESSION_KEY)}
+function isAdmin(){const s=getSession();return !!s&&s.username===ADMIN_USERNAME}
+function canEditTasks(){return !window.__isViewOnly}
+function showScreen(screen){$("loginScreen").classList.toggle("hidden",screen!=="login");$("plannerScreen").classList.toggle("hidden",screen!=="planner")}
+function updateCountdowns(){const now=new Date(),days=t=>Math.ceil((new Date(t)-now)/86400000);const dw=days(WEDDING_DATE),df=days(FINAL_RULE_DATE);$("daysToWedding").textContent=dw>=0?dw:"0";$("daysToFinalRule").textContent=df>=0?df:"Overdue";$("finalRuleItem").classList.toggle("overdue",df<0)}
+function isOverdue(t){if(t.done)return false;if(t.deadline)return new Date()>new Date(t.deadline+"T23:59:59");return !!t.isTba&&new Date()>new Date(FINAL_RULE_DATE)}
+function currentSectionName(){const d=Math.ceil((new Date(WEDDING_DATE)-new Date())/86400000);if(d>21)return"4 Weeks To Go";if(d>14)return"3 Weeks To Go";if(d>7)return"2 Weeks To Go";if(d>3)return"1 Week To Go";if(d>=0)return"2-3 Days / Eve";return"Wedding Day"}
+function rebuildSections(){const found=[];[...DEFAULT_SECTION_ORDER,...allTasks.map(t=>t.section),...dynamic.sections].forEach(x=>{if(x&&!found.includes(x))found.push(x)});sectionOrder=found.filter(s=>s&&!dynamic.sections.filter(x=>x===s&&false));sectionOrder=sectionOrder.filter(s=>!dynamic.deletedSections?.includes(s));sectionOrder=sectionOrder.map(s=>dynamic.sectionNames[s]||s)}
+function normalizeRemote(){const deleted=new Set(dynamic.deletedTaskIds);const renamed={};Object.entries(dynamic.sectionNames).forEach(([a,b])=>renamed[a]=b);const remote=allTasks.filter(t=>!deleted.has(t.taskId)).map(t=>({...t,section:renamed[t.section]||t.section}));const local=dynamic.tasks.map(t=>({...t}));return [...remote,...local]}
+async function loadGuestStats(){try{const d=await apiGet("stats");$("rsvpGuestCount").textContent=Number(d.totalGuests||0);$("confirmedGuestCount").textContent=Number(d.confirmedGuests||0)}catch(e){console.error(e)}}
+async function loadTasks(){try{const d=await apiGet("listTasks");allTasks=Array.isArray(d.tasks)?d.tasks:[];rebuildSections();renderSections()}catch(e){console.error(e);showToast("Couldn't load the checklist.");rebuildSections();renderSections()}}
+function visibleTask(t,current){if(selectedSection&&t.section!==selectedSection)return false;if(searchTerm&&!String(t.text).toLowerCase().includes(searchTerm.toLowerCase()))return false;if(activeFilter==="pending")return !t.done;if(activeFilter==="completed")return !!t.done;if(activeFilter==="current")return t.section===current;if(activeFilter==="tba")return !!t.isTba;if(activeFilter==="overdue")return isOverdue(t);return true}
+function updateSectionFilter(){const select=$("sectionFilter"),prev=selectedSection;select.innerHTML='<option value="">All checklists</option>'+sectionOrder.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");select.value=prev}
+function commentHtml(id){const list=dynamic.comments[id]||[];const open=commentsOpen.has(id);if(!open)return `<button class="action-btn comment-toggle" data-comments="${escapeHtml(id)}" type="button">Comments${list.length?` (${list.length})`:""}</button>`;return `<button class="action-btn comment-toggle" data-comments="${escapeHtml(id)}" type="button">Hide Comments${list.length?` (${list.length})`:""}</button><div class="comments-panel"><strong>Comments</strong>${list.length?list.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(c.author||"Administrator")}</span><span>${escapeHtml(c.createdAt||"")}${isAdmin()?` <button class="action-btn danger" data-delete-comment="${escapeHtml(c.id)}" data-comment-task="${escapeHtml(id)}" type="button">Delete</button>`:""}</span></div><div>${escapeHtml(c.text)}</div></div>`).join(""):'<div class="section-empty">No comments yet.</div>'}${isAdmin()?`<div class="comment-form"><textarea data-comment-input="${escapeHtml(id)}" placeholder="Add a comment..."></textarea><button class="action-btn primary" data-add-comment="${escapeHtml(id)}" type="button">Add Comment</button></div>`:""}</div>`}
+function renderSections(){const container=$("sectionsContainer");const tasks=normalizeRemote();const current=currentSectionName();updateSectionFilter();container.innerHTML="";let total=0,done=0,shownSections=0;
+sectionOrder.forEach(section=>{const sectionTasks=tasks.filter(t=>t.section===section);const visible=sectionTasks.filter(t=>visibleTask(t,current));if(!visible.length&&activeFilter!=="all")return;if(!sectionTasks.length&&!isAdmin())return;shownSections++;total+=sectionTasks.length;done+=sectionTasks.filter(t=>t.done).length;const pct=sectionTasks.length?Math.round(doneFor(sectionTasks)/sectionTasks.length*100):0;const card=document.createElement("div");card.className="section-card"+(section===current?" current":"");const admin=(isAdmin()&&adminManagement)?`<div class="section-actions"><button class="action-btn" data-add-task="${escapeHtml(section)}" type="button">+ Task</button><button class="action-btn" data-rename-section="${escapeHtml(section)}" type="button">Rename</button><button class="action-btn danger" data-delete-section="${escapeHtml(section)}" type="button">Delete</button></div>`:"";let rows=visible.map(t=>taskHtml(t)).join("");if(!rows)rows='<div class="section-empty">No tasks match the current filter.</div>';card.innerHTML=`<div class="section-header"><div><h2>${escapeHtml(section)}</h2><div class="section-progress">${doneFor(sectionTasks)} of ${sectionTasks.length} complete</div></div><div>${section===current?'<span class="section-badge">Current</span>':""}${admin}</div></div><div class="section-bar"><div class="section-bar-fill" style="width:${pct}%"></div></div>${rows}`;container.appendChild(card)});
+const pct=total?Math.round(done/total*100):0;$("overallFill").style.width=pct+"%";$("overallLabel").textContent=done+" of "+total+" tasks complete";if(!shownSections)container.innerHTML='<div class="section-card"><div class="section-empty">No checklists match the current filters.</div></div>';bindDynamicEvents()}
+function doneFor(ts){return ts.filter(t=>t.done).length}
+function taskHtml(t){const overdue=isOverdue(t),readOnly=!canEditTasks()?"disabled":"";const admin=(isAdmin()&&adminManagement)?`<div class="task-actions"><button class="action-btn" data-edit-task="${escapeHtml(t.taskId)}" type="button">Edit</button><button class="action-btn danger" data-delete-task="${escapeHtml(t.taskId)}" type="button">Delete</button></div>`:"";const tba=t.isTba?`<span class="tba-badge${overdue?" overdue":""}">${overdue?"Overdue":"TBA"}</span><div class="tba-fields"><input type="text" placeholder="Assigned to" value="${escapeHtml(t.assignedTo)}" data-assign-id="${escapeHtml(t.taskId)}" ${readOnly}><input type="date" value="${escapeHtml(t.deadline)}" data-deadline-id="${escapeHtml(t.taskId)}" ${readOnly}></div>`:"";return `<div class="task-row"><input type="checkbox" class="task-check" ${t.done?"checked":""} data-task-id="${escapeHtml(t.taskId)}" ${readOnly}><div class="task-body"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><span class="task-text${t.done?" done":""}">${escapeHtml(t.text)}</span>${admin}</div>${tba}${commentHtml(t.taskId)}</div></div>`}
+async function toggleTask(id,done){const local=dynamic.tasks.find(t=>t.taskId===id);if(local){local.done=done;saveLocal();renderSections();return}const remote=allTasks.find(t=>t.taskId===id);if(remote)remote.done=done;renderSections();try{const d=await apiGet("toggleTask",{id,done});if(d.status!=="success")throw new Error(d.message)}catch(e){showToast("Couldn't save — try again.");await loadTasks()}}
+async function saveTbaField(id,field,value){const local=dynamic.tasks.find(t=>t.taskId===id);if(local){local[field]=value;saveLocal();showToast("Saved.");return}const t=allTasks.find(x=>x.taskId===id);if(!t)return;const assignedTo=field==="assignedTo"?value:t.assignedTo,deadline=field==="deadline"?value:t.deadline;try{const d=await apiGet("updateTask",{id,assignedTo,deadline});if(d.status!=="success")throw new Error(d.message);t.assignedTo=assignedTo;t.deadline=deadline;showToast("Saved.")}catch(e){showToast("Couldn't save — try again.")}}
+function openModal(title,fields,onSave){const b=document.createElement("div");b.className="modal-backdrop show";b.innerHTML=`<div class="modal"><h3>${escapeHtml(title)}</h3>${fields.map(f=>`<label>${escapeHtml(f.label)}</label>${f.type==="select"?`<select id="modal_${f.key}">${f.options.map(o=>`<option value="${escapeHtml(o)}" ${o===f.value?"selected":""}>${escapeHtml(o)}</option>`).join("")}</select>`:`<input id="modal_${f.key}" value="${escapeHtml(f.value||"")}" placeholder="${escapeHtml(f.placeholder||"")}">`}`).join("")}<div class="modal-actions"><button class="action-btn" data-modal-cancel type="button">Cancel</button><button class="action-btn primary" data-modal-save type="button">Save</button></div></div>`;document.body.appendChild(b);b.querySelector("[data-modal-cancel]").onclick=()=>b.remove();b.querySelector("[data-modal-save]").onclick=()=>{const values={};fields.forEach(f=>values[f.key]=b.querySelector("#modal_"+f.key).value.trim());onSave(values,b)}}
+function addSection(){openModal("Add Checklist",[{key:"name",label:"Checklist name",placeholder:"e.g. Reception Setup"}],({name},b)=>{if(!name)return showToast("Enter a checklist name.");if(sectionOrder.includes(name))return showToast("That checklist already exists.");dynamic.sections.push(name);saveLocal();b.remove();rebuildSections();renderSections();showToast("Checklist added.")})}
+function renameSection(oldName){openModal("Rename Checklist",[{key:"name",label:"New name",value:oldName}],({name},b)=>{if(!name||name===oldName){b.remove();return}if(sectionOrder.includes(name))return showToast("A checklist with that name already exists.");dynamic.sectionNames[oldName]=name;dynamic.sections=dynamic.sections.map(s=>s===oldName?name:s);dynamic.tasks.forEach(t=>{if(t.section===oldName)t.section=name});saveLocal();b.remove();rebuildSections();renderSections();showToast("Checklist renamed.")})}
+function deleteSection(name){if(!confirm(`Delete checklist "${name}" and its local tasks?`))return;dynamic.deletedSections=dynamic.deletedSections||[];if(!dynamic.deletedSections.includes(name))dynamic.deletedSections.push(name);normalizeRemote().filter(t=>t.section===name&&allTasks.some(r=>r.taskId===t.taskId)).forEach(t=>{if(!dynamic.deletedTaskIds.includes(t.taskId))dynamic.deletedTaskIds.push(t.taskId)});dynamic.tasks=dynamic.tasks.filter(t=>t.section!==name);dynamic.sections=dynamic.sections.filter(s=>s!==name);saveLocal();rebuildSections();renderSections();showToast("Checklist deleted locally.")}
+function addTask(section){openModal("Add Task",[{key:"text",label:"Task description",placeholder:"Enter task"},{key:"assignedTo",label:"Assigned to",placeholder:"Optional"},{key:"deadline",label:"Deadline (YYYY-MM-DD)",placeholder:"Optional"}],(v,b)=>{if(!v.text)return showToast("Enter a task description.");dynamic.tasks.push({taskId:uid("local"),section,text:v.text,assignedTo:v.assignedTo,deadline:v.deadline,done:false,isTba:!v.deadline});saveLocal();b.remove();renderSections();showToast("Task added.")})}
+function editTask(id){const t=normalizeRemote().find(x=>x.taskId===id);if(!t)return;openModal("Edit Task",[{key:"text",label:"Task description",value:t.text},{key:"section",label:"Checklist",type:"select",value:t.section,options:sectionOrder},{key:"assignedTo",label:"Assigned to",value:t.assignedTo||""},{key:"deadline",label:"Deadline",value:t.deadline||""}],(v,b)=>{const local=dynamic.tasks.find(x=>x.taskId===id);if(local){Object.assign(local,{text:v.text,section:v.section,assignedTo:v.assignedTo,deadline:v.deadline,isTba:!v.deadline});saveLocal();b.remove();renderSections();showToast("Task updated.")}else{t.text=v.text;t.section=v.section;t.assignedTo=v.assignedTo;t.deadline=v.deadline;dynamic.tasks.push({...t,taskId:id});dynamic.deletedTaskIds.push(id);saveLocal();b.remove();rebuildSections();renderSections();showToast("Task update saved locally.")}})}
+function deleteTask(id){if(!confirm("Delete this task?"))return;if(allTasks.some(t=>t.taskId===id)){if(!dynamic.deletedTaskIds.includes(id))dynamic.deletedTaskIds.push(id)}dynamic.tasks=dynamic.tasks.filter(t=>t.taskId!==id);delete dynamic.comments[id];saveLocal();renderSections();showToast("Task deleted.")}
+function bindDynamicEvents(){document.querySelectorAll("[data-task-id]").forEach(e=>e.onchange=()=>toggleTask(e.dataset.taskId,e.checked));document.querySelectorAll("[data-assign-id]").forEach(e=>e.onchange=()=>saveTbaField(e.dataset.assignId,"assignedTo",e.value));document.querySelectorAll("[data-deadline-id]").forEach(e=>e.onchange=()=>saveTbaField(e.dataset.deadlineId,"deadline",e.value));document.querySelectorAll("[data-comments]").forEach(e=>e.onclick=()=>{const id=e.dataset.comments;commentsOpen.has(id)?commentsOpen.delete(id):commentsOpen.add(id);renderSections()});document.querySelectorAll("[data-add-comment]").forEach(e=>e.onclick=()=>{const id=e.dataset.addComment,input=document.querySelector(`[data-comment-input="${CSS.escape(id)}"]`),text=input?.value.trim();if(!text)return showToast("Enter a comment.");(dynamic.comments[id]||(dynamic.comments[id]=[])).push({id:uid("comment"),text,author:"Administrator",createdAt:new Date().toLocaleString()});saveLocal();commentsOpen.add(id);renderSections();showToast("Comment added.")});document.querySelectorAll("[data-delete-comment]").forEach(e=>e.onclick=()=>{const id=e.dataset.commentTask;dynamic.comments[id]=(dynamic.comments[id]||[]).filter(c=>c.id!==e.dataset.deleteComment);saveLocal();renderSections()});document.querySelectorAll("[data-add-task]").forEach(e=>e.onclick=()=>addTask(e.dataset.addTask));document.querySelectorAll("[data-rename-section]").forEach(e=>e.onclick=()=>renameSection(e.dataset.renameSection));document.querySelectorAll("[data-delete-section]").forEach(e=>e.onclick=()=>deleteSection(e.dataset.deleteSection));document.querySelectorAll("[data-edit-task]").forEach(e=>e.onclick=()=>editTask(e.dataset.editTask));document.querySelectorAll("[data-delete-task]").forEach(e=>e.onclick=()=>deleteTask(e.dataset.deleteTask))}
+function bindStatic(){
+$("loginBtn").onclick=login;$("loginPass").onkeydown=e=>{if(e.key==="Enter")login()};$("plannerLogout").onclick=()=>{clearSession();location.reload()};$("plannerRefresh").onclick=async()=>{await loadTasks();await loadGuestStats();showToast("Planner refreshed.")};document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{activeFilter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderSections()});$("taskSearch").oninput=e=>{searchTerm=e.target.value;renderSections()};$("sectionFilter").onchange=e=>{selectedSection=e.target.value;renderSections()};$("addSectionBtn").onclick=addSection;$("manageToggle").onclick=()=>{adminManagement=!adminManagement;$("manageToggle").textContent="Management: "+(adminManagement?"On":"Off");renderSections()}}
+async function login(){const username=$("loginUser").value.trim(),password=$("loginPass").value;const match=Object.keys(CREDENTIALS).find(k=>k.toLowerCase()===username.toLowerCase()),entry=match?CREDENTIALS[match]:null;if(!entry||entry.password!==password){$("loginError").style.display="block";return}$("loginError").style.display="none";setSession(match,entry.label,entry.role);$("loginUser").value="";$("loginPass").value="";await boot()}
+async function boot(){const s=getSession();if(!s){showScreen("login");return}window.__isViewOnly=s.role==="viewonly";$("plannerWho").textContent=s.label;$("adminPanel").classList.toggle("show",isAdmin());showScreen("planner");await loadTasks();await loadGuestStats()}
+loadLocal();bindStatic();updateCountdowns();setInterval(updateCountdowns,60000);boot();
 })();
 </script>
 
