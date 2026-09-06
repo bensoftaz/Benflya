@@ -663,7 +663,9 @@ function normalizeGuest(guest) {
     checkedInAt: guest.checkedInAt || guest.CheckedInAt || guest.CheckedInTime || guest.time || "",
     dietary: guest.dietary || guest.Dietary || "",
     plusOneName: guest.plusOneName || guest.PlusOneName || "",
-    paymentStatus: String(guest.paymentStatus || guest.PaymentStatus || "").toLowerCase()
+    paymentStatus: String(guest.paymentStatus || guest.PaymentStatus || "").toLowerCase(),
+    paymentEmailSentAt: guest.paymentEmailSentAt || guest.PaymentEmailSentAt || "",
+    phone: String(guest.phone || guest.Phone || "").trim()
   };
 }
 
@@ -697,11 +699,16 @@ function renderTable() {
       : "—";
 
     const isPaid = guest.paymentStatus === "paid";
+    const alreadySent = !!guest.paymentEmailSentAt;
     const paymentBadge = isPaid
       ? `<span class="badge-small badge-attending">Paid</span>`
       : guest.paymentStatus === "unpaid"
         ? `<span class="badge-small badge-declined">Not Paid</span>`
-        : `<span class="badge-small badge-nodetails">No Details</span>`;
+        : alreadySent
+          ? `<span class="badge-small badge-nodetails">Details Sent</span>`
+          : `<span class="badge-small badge-nodetails">No Details</span>`;
+
+    const sendBtnLabel = alreadySent ? "Resend Payment Details" : "Send Payment Details";
 
     tr.innerHTML = `
       <td>
@@ -719,7 +726,7 @@ function renderTable() {
       <td>
         ${attending && guest.email ? `
           <div style="margin-bottom:6px;">${paymentBadge}</div>
-          <button class="payment-btn" data-payment-id="${escapeHtml(guest.guestId)}" type="button">Send Payment Details</button>
+          <button class="payment-btn" data-payment-id="${escapeHtml(guest.guestId)}" type="button">${sendBtnLabel}</button>
           <button class="payment-btn" data-mark-paid-id="${escapeHtml(guest.guestId)}" data-current-status="${isPaid ? 'paid' : 'unpaid'}" type="button" style="margin-top:6px;background:${isPaid ? '#999' : 'var(--burgundy-800)'};">${isPaid ? 'Mark Unpaid' : 'Mark Paid'}</button>
           <div class="payment-status" id="payment-status-${escapeHtml(guest.guestId)}"></div>
         ` : "—"}
@@ -741,25 +748,91 @@ function renderTable() {
   });
 }
 
+function findGuestById(guestId) {
+  const id = String(guestId || "").toUpperCase();
+  return allGuests.map(normalizeGuest).find(g => String(g.guestId).toUpperCase() === id) || null;
+}
+
+function openWhatsAppPaymentReminder(guest) {
+  const rawPhone = String(guest.phone || "").replace(/[^\d+]/g, "");
+  if (!rawPhone) {
+    alert("No phone number saved for this guest.");
+    return;
+  }
+  // wa.me expects digits only (country code without leading +)
+  const cleanPhone = rawPhone.replace(/^\+/, "");
+  const message =
+    `Hello ${guest.name}, we have not received your payment for this RSVP for Guest ID: ${guest.guestId}. Kindly complete your payment...`;
+  const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  window.open(url, "_blank");
+}
+
 async function sendPaymentDetails(guestId, button) {
-  const status = document.getElementById("payment-status-" + guestId);
-  if (!guestId || !status) return;
+  const statusEl = document.getElementById("payment-status-" + guestId);
+  if (!guestId || !statusEl) return;
+
+  const guest = findGuestById(guestId);
+  if (!guest) {
+    showToast("Guest not found in the current list. Please refresh.");
+    return;
+  }
+
+  // Already been sent before → confirmation dialog
+  if (guest.paymentEmailSentAt) {
+    let sentLabel;
+    try {
+      sentLabel = new Date(guest.paymentEmailSentAt).toLocaleString();
+    } catch (e) {
+      sentLabel = guest.paymentEmailSentAt;
+    }
+
+    const resend = confirm(
+      `Payment email was already sent on ${sentLabel}.\n\n` +
+      `Click OK to resend the email, or Cancel to see the WhatsApp option instead.`
+    );
+
+    if (!resend) {
+      // User chose Cancel → offer WhatsApp
+      const useWhatsApp = confirm("Send a WhatsApp payment reminder instead?");
+      if (useWhatsApp) {
+        openWhatsAppPaymentReminder(guest);
+      }
+      return; // do not call the API
+    }
+    // User clicked OK → fall through and resend
+  }
+
+  // First-time send OR confirmed resend
   button.disabled = true;
+  const originalLabel = button.textContent;
   button.textContent = "Sending…";
-  status.textContent = "Sending payment details…";
-  status.className = "payment-status sending";
+  statusEl.textContent = "Sending payment details…";
+  statusEl.className = "payment-status sending";
+
   try {
     const data = await apiGet("sendPayment", { id: guestId });
     if (data.status !== "success") throw new Error(data.message || "Payment email failed.");
-    const email = data.email || data.to || "";
-    status.textContent = email ? `✓ Sent to ${email}` : "✓ Sent to guest";
-    status.className = "payment-status success";
+
+    const email = data.email || data.to || guest.email || "";
+    statusEl.textContent = email ? `✓ Sent to ${email}` : "✓ Sent to guest";
+    statusEl.className = "payment-status success";
     button.textContent = "Sent";
+
+    // Update local cache so the next click sees the new timestamp
+    const raw = allGuests.find(g =>
+      String(g.guestId || g.GuestId || g.GuestID || "").toUpperCase() === guestId.toUpperCase()
+    );
+    if (raw) {
+      raw.paymentEmailSentAt = new Date().toISOString();
+    }
+
+    // Re-render so the button label becomes "Resend…"
+    renderTable();
   } catch (error) {
     console.error("Payment email error:", error);
-    status.textContent = "✕ " + (error && error.message ? error.message : "Couldn't send — try again.");
-    status.className = "payment-status error";
-    button.textContent = "Send Payment Details";
+    statusEl.textContent = "✕ " + (error && error.message ? error.message : "Couldn't send — try again.");
+    statusEl.className = "payment-status error";
+    button.textContent = originalLabel;
   } finally {
     button.disabled = false;
   }
