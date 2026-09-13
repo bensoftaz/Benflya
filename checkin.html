@@ -258,7 +258,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       </div>
       <div class="counter-box">
         <div class="counter-number" id="attendingCount">0</div>
-        <div class="counter-label">Expected</div>
+        <div class="counter-label">Guests Expected</div>
       </div>
     </div>
   </main>
@@ -600,7 +600,8 @@ async function refreshCounter() {
   try {
     const data = await apiGet("stats");
     $("checkedInCount").textContent = Number(data.checkedIn || 0);
-    $("attendingCount").textContent = Number(data.attending || 0);
+    // Expected = total guest headcount (party sizes), not RSVP form count
+    $("attendingCount").textContent = Number(data.totalGuests || data.expectedGuests || 0);
   } catch (error) {
     console.warn("Stats error:", error);
   }
@@ -651,6 +652,8 @@ async function loadStats() {
     $("admGuests").textContent = Number(data.totalGuests || data.total || 0);
     $("admCheckedIn").textContent = Number(data.checkedIn || 0);
     $("admPaid").textContent = Number(data.paid || 0);
+    window.__paidAttendees = Array.isArray(data.paidAttendees) ? data.paidAttendees : [];
+    updatePaidNamesPanel();
   } catch (error) {
     console.error("Admin stats error:", error);
     showToast("Couldn't load statistics.");
@@ -699,7 +702,10 @@ function normalizeGuest(guest) {
     paymentEmailSentAt: guest.paymentEmailSentAt || guest.PaymentEmailSentAt || "",
     phone: String(guest.phone || guest.Phone || "").trim(),
     table: String(guest.table || guest.Table || "").trim(),
-    seat: String(guest.seat || guest.Seat || "").trim()
+    seat: String(guest.seat || guest.Seat || "").trim(),
+    partyNames: Array.isArray(guest.partyNames) ? guest.partyNames : [],
+    paymentKind: String(guest.paymentKind || guest.PaymentKind || guest.paymentStatus || "").toLowerCase(),
+    confirmed: !!(guest.confirmed || guest.paymentStatus === "paid")
   };
 }
 
@@ -1003,17 +1009,31 @@ async function deleteGuestRecord(guestId, button) {
 function updatePaidNamesPanel() {
   const list = $("paidNamesList");
   if (!list) return;
-  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid");
+  // Prefer expanded seat names from last stats payload when available
+  if (window.__paidAttendees && window.__paidAttendees.length) {
+    list.innerHTML = window.__paidAttendees
+      .map(a => "<li><strong>" + escapeHtml(a.name || "Guest") + "</strong> <small>(" + escapeHtml(a.guestId || "") +
+        (a.seatIndex ? " · seat " + a.seatIndex + "/" + (a.partySize || "") : "") +
+        (a.paymentKind === "comp" ? " · comp" : "") + ")</small></li>")
+      .join("");
+    return;
+  }
+  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid" || g.paymentKind === "comp" || g.confirmed);
   if (!paid.length) {
     list.innerHTML = "<li>No guests marked paid yet.</li>";
     return;
   }
-  list.innerHTML = paid
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map(g => "<li><strong>" + escapeHtml(g.name || "Unnamed") + "</strong> <small>(" + escapeHtml(g.guestId) + ")</small>" +
-      (g.table || g.seat ? " — " + escapeHtml([g.table && ("Table " + g.table), g.seat && ("Seat " + g.seat)].filter(Boolean).join(", ")) : "") +
-      "</li>")
-    .join("");
+  const rows = [];
+  paid.forEach(g => {
+    const names = Array.isArray(g.partyNames) && g.partyNames.length
+      ? g.partyNames
+      : [g.name || "Guest"];
+    names.forEach((nm, idx) => {
+      rows.push("<li><strong>" + escapeHtml(nm) + "</strong> <small>(" + escapeHtml(g.guestId) +
+        " · seat " + (idx + 1) + "/" + names.length + ")</small></li>");
+    });
+  });
+  list.innerHTML = rows.join("") || "<li>No guests marked paid yet.</li>";
 }
 
 function togglePaidNamesPanel() {
