@@ -122,7 +122,7 @@ button { cursor: pointer; }
 .counter-label { margin-top: 2px; color: #75656a; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 
 .admin-container { width: 100%; max-width: 1100px; margin: 0 auto; }
-.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat-box { padding: 18px; background: var(--cream); color: var(--ink); border-radius: 13px; text-align: center; box-shadow: var(--shadow); }
 .stat-box .n { color: var(--burgundy-800); font-size: 30px; font-weight: 900; }
 .stat-box .l { margin-top: 3px; color: #75656a; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
@@ -185,6 +185,26 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.stat-box.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.stat-box.clickable:active { transform: scale(0.98); }
+.stat-box.clickable:hover { box-shadow: 0 0 0 2px var(--gold); }
+#paidNamesPanel {
+  display: none; margin: 12px 0 18px; padding: 14px 16px; border-radius: 12px;
+  background: var(--cream); border: 1px solid var(--border); color: var(--ink);
+}
+#paidNamesPanel.open { display: block; }
+#paidNamesPanel h3 { margin: 0 0 10px; font-size: 15px; color: var(--burgundy-900); }
+#paidNamesPanel ul { margin: 0; padding-left: 18px; }
+#paidNamesPanel li { margin: 4px 0; font-size: 14px; }
+.seat-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.seat-row input { width: 72px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13px; }
+.seat-row button, .delete-guest-btn {
+  border: 0; border-radius: 8px; padding: 6px 10px; font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.delete-guest-btn { background: #c62828; color: #fff; margin-top: 6px; }
+.seat-save-btn { background: var(--burgundy-800); color: #fff; }
+
 </style>
 </head>
 
@@ -262,11 +282,18 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <div class="stat-box"><div class="n" id="admDeclined">0</div><div class="l">Declined</div></div>
       <div class="stat-box"><div class="n" id="admGuests">0</div><div class="l">Total Guests</div></div>
       <div class="stat-box"><div class="n" id="admCheckedIn">0</div><div class="l">Checked In</div></div>
+      <div class="stat-box clickable" id="admPaidBox" title="Tap to show paid guest names"><div class="n" id="admPaid">0</div><div class="l">Confirmed (Paid) · tap</div></div>
     </div>
 
     <section class="card">
       <h2>Guest List</h2>
       <div class="search-row">
+    <div id="paidNamesPanel" aria-live="polite">
+      <h3>Guests marked paid</h3>
+      <p style="margin:0 0 8px;font-size:13px;color:#75656a;">Only guests with payment status <b>paid</b>.</p>
+      <ul id="paidNamesList"></ul>
+    </div>
+
         <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
         <button id="admRefresh2" type="button">Refresh</button>
       </div>
@@ -606,6 +633,8 @@ async function initAdmin() {
   $("admRefresh").addEventListener("click", refreshAdmin);
   $("admRefresh2").addEventListener("click", refreshAdmin);
   $("admSearch").addEventListener("input", renderTable);
+  const paidBox = $("admPaidBox");
+  if (paidBox) paidBox.addEventListener("click", togglePaidNamesPanel);
 }
 
 async function refreshAdmin() {
@@ -621,6 +650,7 @@ async function loadStats() {
     $("admDeclined").textContent = Number(data.declined || 0);
     $("admGuests").textContent = Number(data.totalGuests || data.total || 0);
     $("admCheckedIn").textContent = Number(data.checkedIn || 0);
+    $("admPaid").textContent = Number(data.paid || 0);
   } catch (error) {
     console.error("Admin stats error:", error);
     showToast("Couldn't load statistics.");
@@ -642,10 +672,12 @@ async function loadGuestList() {
       allGuests = [];
     }
     renderTable();
+    updatePaidNamesPanel();
   } catch (error) {
     console.error("Guest list error:", error);
     allGuests = [];
     renderTable();
+    updatePaidNamesPanel();
     showToast("Couldn't load guest list.");
   }
 }
@@ -665,7 +697,9 @@ function normalizeGuest(guest) {
     plusOneName: guest.plusOneName || guest.PlusOneName || "",
     paymentStatus: String(guest.paymentStatus || guest.PaymentStatus || "").toLowerCase(),
     paymentEmailSentAt: guest.paymentEmailSentAt || guest.PaymentEmailSentAt || "",
-    phone: String(guest.phone || guest.Phone || "").trim()
+    phone: String(guest.phone || guest.Phone || "").trim(),
+    table: String(guest.table || guest.Table || "").trim(),
+    seat: String(guest.seat || guest.Seat || "").trim()
   };
 }
 
@@ -701,7 +735,7 @@ function renderTable() {
     const isPaid = guest.paymentStatus === "paid";
     const alreadySent = !!guest.paymentEmailSentAt;
     const paymentBadge = isPaid
-      ? `<span class="badge-small badge-attending">Paid</span>`
+      ? `<span class="badge-small badge-attending">Confirmed / Paid</span>`
       : guest.paymentStatus === "unpaid"
         ? `<span class="badge-small badge-declined">Not Paid</span>`
         : alreadySent
@@ -728,8 +762,20 @@ function renderTable() {
           <div style="margin-bottom:6px;">${paymentBadge}</div>
           <button class="payment-btn" data-payment-id="${escapeHtml(guest.guestId)}" type="button">${sendBtnLabel}</button>
           <button class="payment-btn" data-mark-paid-id="${escapeHtml(guest.guestId)}" data-current-status="${isPaid ? 'paid' : 'unpaid'}" type="button" style="margin-top:6px;background:${isPaid ? '#999' : 'var(--burgundy-800)'};">${isPaid ? 'Mark Unpaid' : 'Mark Paid'}</button>
+          <div class="seat-row">
+            <input type="text" placeholder="Table" value="${escapeHtml(guest.table)}" data-table-input="${escapeHtml(guest.guestId)}" aria-label="Table">
+            <input type="text" placeholder="Seat" value="${escapeHtml(guest.seat)}" data-seat-input="${escapeHtml(guest.guestId)}" aria-label="Seat">
+            <button class="seat-save-btn" data-save-seat="${escapeHtml(guest.guestId)}" type="button">Save seat</button>
+          </div>
           <div class="payment-status" id="payment-status-${escapeHtml(guest.guestId)}"></div>
-        ` : "—"}
+        ` : (attending ? `
+          <div class="seat-row">
+            <input type="text" placeholder="Table" value="${escapeHtml(guest.table)}" data-table-input="${escapeHtml(guest.guestId)}">
+            <input type="text" placeholder="Seat" value="${escapeHtml(guest.seat)}" data-seat-input="${escapeHtml(guest.guestId)}">
+            <button class="seat-save-btn" data-save-seat="${escapeHtml(guest.guestId)}" type="button">Save seat</button>
+          </div>
+        ` : "—")}
+        <button class="delete-guest-btn" data-delete-guest="${escapeHtml(guest.guestId)}" type="button">Delete guest</button>
       </td>
     `;
     body.appendChild(tr);
@@ -745,6 +791,14 @@ function renderTable() {
     button.addEventListener("click", () => {
       togglePaymentStatus(button.dataset.markPaidId, button.dataset.currentStatus, button);
     });
+  });
+
+  body.querySelectorAll("[data-save-seat]").forEach(button => {
+    button.addEventListener("click", () => saveSeatAssignment(button.dataset.saveSeat, button));
+  });
+
+  body.querySelectorAll("[data-delete-guest]").forEach(button => {
+    button.addEventListener("click", () => deleteGuestRecord(button.dataset.deleteGuest, button));
   });
 }
 
@@ -777,7 +831,9 @@ async function sendPaymentDetails(guestId, button) {
     return;
   }
 
-  // Already been sent before → confirmation dialog
+  let forceResend = false;
+
+  // Already been sent before (column P has a date) → confirmation dialog
   if (guest.paymentEmailSentAt) {
     let sentLabel;
     try {
@@ -792,14 +848,14 @@ async function sendPaymentDetails(guestId, button) {
     );
 
     if (!resend) {
-      // User chose Cancel → offer WhatsApp
+      // User chose Cancel → offer WhatsApp (phone from column N)
       const useWhatsApp = confirm("Send a WhatsApp payment reminder instead?");
       if (useWhatsApp) {
         openWhatsAppPaymentReminder(guest);
       }
-      return; // do not call the API
+      return; // do not call the API at all
     }
-    // User clicked OK → fall through and resend
+    forceResend = true; // user confirmed → allow the backend to send again
   }
 
   // First-time send OR confirmed resend
@@ -810,7 +866,27 @@ async function sendPaymentDetails(guestId, button) {
   statusEl.className = "payment-status sending";
 
   try {
-    const data = await apiGet("sendPayment", { id: guestId });
+    const params = { id: guestId };
+    if (forceResend) params.force = "1";
+
+    const data = await apiGet("sendPayment", params);
+
+    // Backend may still refuse if column P is set and force was not accepted
+    if (data.status === "already_sent") {
+      const when = data.previouslySentAt
+        ? new Date(data.previouslySentAt).toLocaleString()
+        : "previously";
+      statusEl.textContent = `Already sent on ${when}`;
+      statusEl.className = "payment-status error";
+      button.textContent = originalLabel;
+
+      const useWhatsApp = confirm(
+        `Payment email was already sent on ${when}.\n\nSend a WhatsApp payment reminder instead?`
+      );
+      if (useWhatsApp) openWhatsAppPaymentReminder(guest);
+      return;
+    }
+
     if (data.status !== "success") throw new Error(data.message || "Payment email failed.");
 
     const email = data.email || data.to || guest.email || "";
@@ -850,11 +926,18 @@ async function togglePaymentStatus(guestId, currentStatus, button) {
     const rawGuest = allGuests.find(g => String(g.guestId || g.GuestId || g.GuestID || "").toUpperCase() === guestId.toUpperCase());
     if (rawGuest) rawGuest.paymentStatus = newStatus;
     if (status) {
-      status.textContent = newStatus === "paid" ? "✓ Marked as paid" : "Marked as unpaid";
+      if (newStatus === "paid") {
+        status.textContent = data.thankYouSent
+          ? "✓ Marked paid — thank-you email sent"
+          : (data.thankYouError ? "✓ Marked paid (thank-you email failed)" : "✓ Marked as paid");
+      } else {
+        status.textContent = "Marked as unpaid";
+      }
       status.className = "payment-status success";
     }
     renderTable();
     loadStats();
+    updatePaidNamesPanel();
   } catch (error) {
     console.error("Payment status error:", error);
     if (status) {
@@ -863,6 +946,81 @@ async function togglePaymentStatus(guestId, currentStatus, button) {
     }
     button.disabled = false;
   }
+}
+
+
+async function saveSeatAssignment(guestId, button) {
+  const tableInput = document.querySelector(`[data-table-input="${CSS.escape(guestId)}"]`);
+  const seatInput = document.querySelector(`[data-seat-input="${CSS.escape(guestId)}"]`);
+  const table = tableInput ? tableInput.value.trim() : "";
+  const seat = seatInput ? seatInput.value.trim() : "";
+  const status = document.getElementById("payment-status-" + guestId);
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  try {
+    const data = await apiGet("setSeat", { id: guestId, table, seat });
+    if (data.status !== "success") throw new Error(data.message || "Could not save seat.");
+    const raw = allGuests.find(g => String(g.guestId || g.GuestId || g.GuestID || "").toUpperCase() === guestId.toUpperCase());
+    if (raw) { raw.table = table; raw.seat = seat; }
+    if (status) {
+      status.textContent = data.emailed
+        ? "✓ Seat saved — email sent to guest"
+        : (data.emailError ? "Seat saved (email failed: " + data.emailError + ")" : "✓ Seat saved");
+      status.className = "payment-status success";
+    }
+    showToast(data.emailed ? "Seat saved and guest emailed." : "Seat saved.");
+  } catch (error) {
+    console.error(error);
+    if (status) {
+      status.textContent = "✕ " + (error.message || "Could not save seat");
+      status.className = "payment-status error";
+    }
+    showToast("Couldn't save seat.");
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Save seat"; }
+  }
+}
+
+async function deleteGuestRecord(guestId, button) {
+  const guest = findGuestById(guestId);
+  const label = guest ? (guest.name || guestId) : guestId;
+  if (!confirm("Permanently delete guest \"" + label + "\" (" + guestId + ")? This cannot be undone.")) return;
+  if (button) button.disabled = true;
+  try {
+    const data = await apiGet("deleteGuest", { id: guestId });
+    if (data.status !== "success") throw new Error(data.message || "Delete failed");
+    allGuests = allGuests.filter(g => String(g.guestId || g.GuestId || g.GuestID || "").toUpperCase() !== guestId.toUpperCase());
+    renderTable();
+    loadStats();
+    updatePaidNamesPanel();
+    showToast("Guest deleted.");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Couldn't delete guest.");
+    if (button) button.disabled = false;
+  }
+}
+
+function updatePaidNamesPanel() {
+  const list = $("paidNamesList");
+  if (!list) return;
+  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid");
+  if (!paid.length) {
+    list.innerHTML = "<li>No guests marked paid yet.</li>";
+    return;
+  }
+  list.innerHTML = paid
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .map(g => "<li><strong>" + escapeHtml(g.name || "Unnamed") + "</strong> <small>(" + escapeHtml(g.guestId) + ")</small>" +
+      (g.table || g.seat ? " — " + escapeHtml([g.table && ("Table " + g.table), g.seat && ("Seat " + g.seat)].filter(Boolean).join(", ")) : "") +
+      "</li>")
+    .join("");
+}
+
+function togglePaidNamesPanel() {
+  const panel = $("paidNamesPanel");
+  if (!panel) return;
+  updatePaidNamesPanel();
+  panel.classList.toggle("open");
 }
 
 boot();
