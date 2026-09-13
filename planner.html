@@ -156,6 +156,17 @@ button { cursor: pointer; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
 @media (max-width:600px){ .toolbar-row,.comment-form { flex-direction:column; align-items:stretch; } .section-header { align-items:flex-start; } .section-actions { width:100%; } .filter-btn,.action-btn { width:100%; } .section-actions .action-btn,.task-actions .action-btn { width:auto; } }
 
+
+.roles-panel { margin: 16px 0 20px; padding: 16px; background: var(--cream); border-radius: 14px; border: 1px solid var(--border); color: var(--ink); }
+.roles-panel h2 { margin: 0 0 6px; font-size: 18px; color: var(--burgundy-900); font-family: Georgia, serif; }
+.roles-panel .hint { margin: 0 0 12px; font-size: 13px; color: #75656a; }
+.roles-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.roles-table th, .roles-table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee1e5; vertical-align: middle; }
+.roles-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #75656a; }
+.roles-table input[type="text"] { width: 100%; max-width: 220px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.roles-table .role-name { font-weight: 700; color: var(--burgundy-900); }
+.roles-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
 </style>
 </head>
 
@@ -238,6 +249,16 @@ button { cursor: pointer; }
     </div>
   </div>
 
+    <section class="roles-panel" id="rolesPanel">
+      <h2>Wedding Day Roles</h2>
+      <p class="hint">Visible to everyone signed in. Only Admin, EventsC01 and EventsC02 can assign names.</p>
+      <div id="rolesTableWrap"><p class="section-empty">Loading roles…</p></div>
+      <div class="roles-actions" id="rolesAdminActions" style="display:none;">
+        <button type="button" class="action-btn" id="addRoleBtn">+ Add role</button>
+        <button type="button" class="action-btn" id="refreshRolesBtn">Refresh roles</button>
+      </div>
+    </section>
+
   <div class="container" id="sectionsContainer"></div>
 </section>
 
@@ -261,6 +282,7 @@ function setSession(username,label,role){sessionStorage.setItem(SESSION_KEY,JSON
 function clearSession(){sessionStorage.removeItem(SESSION_KEY)}
 function isAdmin(){const s=getSession();return !!s&&s.username===ADMIN_USERNAME}
 function canEditTasks(){return !window.__isViewOnly}
+function canEditRoles(){const s=getSession();if(!s)return false;const u=String(s.username||"").toLowerCase();return u==="admin"||u==="eventsc01"||u==="eventsc02"}
 function showScreen(screen){$("loginScreen").classList.toggle("hidden",screen!=="login");$("plannerScreen").classList.toggle("hidden",screen!=="planner")}
 function updateCountdowns(){const now=new Date(),days=t=>Math.ceil((new Date(t)-now)/86400000);const dw=days(WEDDING_DATE),df=days(FINAL_RULE_DATE);$("daysToWedding").textContent=dw>=0?dw:"0";$("daysToFinalRule").textContent=df>=0?df:"Overdue";$("finalRuleItem").classList.toggle("overdue",df<0)}
 function isOverdue(t){if(t.done)return false;if(t.deadline)return new Date()>new Date(t.deadline+"T23:59:59");return !!t.isTba&&new Date()>new Date(FINAL_RULE_DATE)}
@@ -291,10 +313,90 @@ function editTask(id){const t=normalizeRemote().find(x=>x.taskId===id);if(!t)ret
 async function deleteTask(id){if(!confirm("Delete this task?"))return;const isRemote=allTasks.some(t=>t.taskId===id);if(isRemote){try{const d=await apiGet("deleteTask",{id});if(d.status!=="success")throw new Error(d.message||"Failed");delete dynamic.comments[id];saveLocal();await loadTasks();showToast("Task deleted.")}catch(e){console.error(e);showToast("Couldn't delete task on server.")}return}dynamic.tasks=dynamic.tasks.filter(t=>t.taskId!==id);delete dynamic.comments[id];saveLocal();renderSections();showToast("Task deleted.")}
 function bindDynamicEvents(){document.querySelectorAll("[data-task-id]").forEach(e=>e.onchange=()=>toggleTask(e.dataset.taskId,e.checked));document.querySelectorAll("[data-assign-id]").forEach(e=>e.onchange=()=>saveTbaField(e.dataset.assignId,"assignedTo",e.value));document.querySelectorAll("[data-deadline-id]").forEach(e=>e.onchange=()=>saveTbaField(e.dataset.deadlineId,"deadline",e.value));document.querySelectorAll("[data-comments]").forEach(e=>e.onclick=()=>{const id=e.dataset.comments;commentsOpen.has(id)?commentsOpen.delete(id):commentsOpen.add(id);renderSections()});document.querySelectorAll("[data-add-comment]").forEach(e=>e.onclick=async()=>{const id=e.dataset.addComment,input=document.querySelector(`[data-comment-input="${CSS.escape(id)}"]`),text=input?.value.trim();if(!text)return showToast("Enter a comment.");(dynamic.comments[id]||(dynamic.comments[id]=[])).push({id:uid("comment"),text,author:(getSession()&&getSession().label)||"Planner",createdAt:new Date().toLocaleString()});saveLocal();commentsOpen.add(id);const ok=await persistComments(id);renderSections();if(ok)showToast("Comment added.")});document.querySelectorAll("[data-delete-comment]").forEach(e=>e.onclick=async()=>{const id=e.dataset.commentTask;dynamic.comments[id]=(dynamic.comments[id]||[]).filter(c=>c.id!==e.dataset.deleteComment);saveLocal();await persistComments(id);renderSections()});document.querySelectorAll("[data-add-task]").forEach(e=>e.onclick=()=>addTask(e.dataset.addTask));document.querySelectorAll("[data-rename-section]").forEach(e=>e.onclick=()=>renameSection(e.dataset.renameSection));document.querySelectorAll("[data-delete-section]").forEach(e=>e.onclick=()=>deleteSection(e.dataset.deleteSection));document.querySelectorAll("[data-edit-task]").forEach(e=>e.onclick=()=>editTask(e.dataset.editTask));document.querySelectorAll("[data-delete-task]").forEach(e=>e.onclick=()=>deleteTask(e.dataset.deleteTask))}
 function bindStatic(){
-$("loginBtn").onclick=login;$("loginPass").onkeydown=e=>{if(e.key==="Enter")login()};$("plannerLogout").onclick=()=>{clearSession();location.reload()};$("plannerRefresh").onclick=async()=>{await loadTasks();await loadGuestStats();showToast("Planner refreshed.")};document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{activeFilter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderSections()});$("taskSearch").oninput=e=>{searchTerm=e.target.value;renderSections()};$("sectionFilter").onchange=e=>{selectedSection=e.target.value;renderSections()};$("addSectionBtn").onclick=addSection;$("manageToggle").onclick=()=>{adminManagement=!adminManagement;$("manageToggle").textContent="Management: "+(adminManagement?"On":"Off");renderSections()}}
+$("loginBtn").onclick=login;$("loginPass").onkeydown=e=>{if(e.key==="Enter")login()};$("plannerLogout").onclick=()=>{clearSession();location.reload()};$("plannerRefresh").onclick=async()=>{await loadTasks();await loadGuestStats();showToast("Planner refreshed.")};document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{activeFilter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderSections()});$("taskSearch").oninput=e=>{searchTerm=e.target.value;renderSections()};$("sectionFilter").onchange=e=>{selectedSection=e.target.value;renderSections()};$("addSectionBtn").onclick=addSection;
+const addRoleBtn=$("addRoleBtn");if(addRoleBtn)addRoleBtn.onclick=addRolePrompt;
+const refreshRolesBtn=$("refreshRolesBtn");if(refreshRolesBtn)refreshRolesBtn.onclick=()=>loadRoles();$("manageToggle").onclick=()=>{adminManagement=!adminManagement;$("manageToggle").textContent="Management: "+(adminManagement?"On":"Off");renderSections()}}
 async function login(){const username=$("loginUser").value.trim(),password=$("loginPass").value;if(!username){$("loginError").style.display="block";return}const btn=$("loginBtn");if(btn){btn.disabled=true;btn.textContent="Signing in…"}try{const data=await apiGet("login",{user:username,pass:password});if(!data||data.status!=="success"){$("loginError").style.display="block";return}$("loginError").style.display="none";setSession(data.username||username,data.label||username,data.role||"viewonly");$("loginUser").value="";$("loginPass").value="";await boot()}catch(e){console.error(e);$("loginError").style.display="block"}finally{if(btn){btn.disabled=false;btn.textContent="Sign In"}}}
-async function boot(){const s=getSession();if(!s){showScreen("login");return}window.__isViewOnly=s.role==="viewonly";const whoEl=$("plannerWho");if(whoEl){whoEl.textContent=s.label;const p=whoEl.parentElement;if(p&&s.role==="viewonly"){p.innerHTML="Welcome <strong id=\"plannerWho\">"+escapeHtml(s.label)+"</strong>"}else if(p){p.innerHTML="Signed in as <strong id=\"plannerWho\">"+escapeHtml(s.label)+"</strong>"}}$("adminPanel").classList.toggle("show",isAdmin());showScreen("planner");await loadTasks();await loadGuestStats()}
-loadLocal();bindStatic();updateCountdowns();setInterval(updateCountdowns,60000);setInterval(()=>{if(!getSession())return;if($("plannerScreen").classList.contains("hidden"))return;loadTasks();loadGuestStats()},60000);boot();
+async function boot(){const s=getSession();if(!s){showScreen("login");return}window.__isViewOnly=s.role==="viewonly";const whoEl=$("plannerWho");if(whoEl){whoEl.textContent=s.label;const p=whoEl.parentElement;if(p&&s.role==="viewonly"){p.innerHTML="Welcome <strong id=\"plannerWho\">"+escapeHtml(s.label)+"</strong>"}else if(p){p.innerHTML="Signed in as <strong id=\"plannerWho\">"+escapeHtml(s.label)+"</strong>"}}$("adminPanel").classList.toggle("show",isAdmin());showScreen("planner");await loadTasks();await loadGuestStats();await loadRoles()}
+
+async function loadRoles(){
+  const wrap=$("rolesTableWrap");
+  if(!wrap)return;
+  try{
+    const d=await apiGet("listRoles");
+    const roles=Array.isArray(d.roles)?d.roles:[];
+    renderRoles(roles);
+  }catch(e){
+    console.error(e);
+    wrap.innerHTML='<p class="section-empty">Could not load roles.</p>';
+  }
+}
+function renderRoles(roles){
+  const wrap=$("rolesTableWrap");
+  if(!wrap)return;
+  const editable=canEditRoles();
+  const adminActions=$("rolesAdminActions");
+  if(adminActions)adminActions.style.display=editable?"flex":"none";
+  if(!roles.length){
+    wrap.innerHTML='<p class="section-empty">No roles defined yet.</p>';
+    return;
+  }
+  let rows=roles.map(r=>{
+    const nameCell=editable
+      ?`<input type="text" data-role-input="${escapeHtml(r.roleId)}" value="${escapeHtml(r.assignedName||"")}" placeholder="Assign name…">`
+      :`<span>${escapeHtml(r.assignedName||"—")}</span>`;
+    const saveBtn=editable?`<button type="button" class="action-btn primary" data-save-role="${escapeHtml(r.roleId)}">Save</button>`:"";
+    const delBtn=(editable&&isAdmin())?`<button type="button" class="action-btn danger" data-delete-role="${escapeHtml(r.roleId)}">Delete</button>`:"";
+    return `<tr>
+      <td class="role-name">${escapeHtml(r.roleName)}</td>
+      <td>${nameCell}</td>
+      <td>${saveBtn}${delBtn}</td>
+    </tr>`;
+  }).join("");
+  wrap.innerHTML=`<table class="roles-table"><thead><tr><th>Role</th><th>Assigned to</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.querySelectorAll("[data-save-role]").forEach(btn=>{
+    btn.onclick=async()=>{
+      const id=btn.dataset.saveRole;
+      const input=wrap.querySelector(`[data-role-input="${CSS.escape(id)}"]`);
+      const name=input?input.value.trim():"";
+      const s=getSession();
+      btn.disabled=true;
+      try{
+        const d=await apiGet("setRole",{roleId:id,name,updatedBy:(s&&s.label)||""});
+        if(d.status!=="success")throw new Error(d.message||"Failed");
+        showToast("Role updated.");
+        await loadRoles();
+      }catch(e){
+        console.error(e);
+        showToast("Could not save role.");
+        btn.disabled=false;
+      }
+    };
+  });
+  wrap.querySelectorAll("[data-delete-role]").forEach(btn=>{
+    btn.onclick=async()=>{
+      if(!confirm("Delete this role?"))return;
+      try{
+        const d=await apiGet("deleteRole",{roleId:btn.dataset.deleteRole});
+        if(d.status!=="success")throw new Error(d.message||"Failed");
+        showToast("Role deleted.");
+        await loadRoles();
+      }catch(e){showToast("Could not delete role.");}
+    };
+  });
+}
+async function addRolePrompt(){
+  const name=prompt("New role name:");
+  if(!name||!name.trim())return;
+  try{
+    const d=await apiGet("addRole",{name:name.trim()});
+    if(d.status!=="success")throw new Error(d.message||"Failed");
+    showToast("Role added.");
+    await loadRoles();
+  }catch(e){showToast("Could not add role.");}
+}
+
+loadLocal();bindStatic();updateCountdowns();setInterval(updateCountdowns,60000);setInterval(()=>{if(!getSession())return;if($("plannerScreen").classList.contains("hidden"))return;loadTasks();loadGuestStats();loadRoles()},60000);boot();
 })();
 </script>
 
