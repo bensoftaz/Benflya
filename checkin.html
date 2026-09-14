@@ -205,6 +205,12 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 .delete-guest-btn { background: #c62828; color: #fff; margin-top: 6px; }
 .seat-save-btn { background: var(--burgundy-800); color: #fff; }
 
+
+.vip-badge {
+  display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px;
+  background: linear-gradient(135deg, #c9a24b, #e2c778); color: #2c0a15;
+  font-size: 10px; font-weight: 900; letter-spacing: .06em; vertical-align: middle;
+}
 </style>
 </head>
 
@@ -738,15 +744,23 @@ function renderTable() {
       ? `<span class="badge-small badge-attending">✓ Checked In</span>${guest.checkedInAt ? `<br><small>${escapeHtml(formatTime(guest.checkedInAt))}</small>` : ""}`
       : "—";
 
-    const isPaid = guest.paymentStatus === "paid";
+    const kind = String(guest.paymentKind || guest.paymentStatus || "").toLowerCase();
+    const isPaid = guest.paymentStatus === "paid" || guest.confirmed || kind === "paid" || kind === "comp" || kind === "vip";
     const alreadySent = !!guest.paymentEmailSentAt;
-    const paymentBadge = isPaid
-      ? `<span class="badge-small badge-attending">Confirmed / Paid</span>`
-      : guest.paymentStatus === "unpaid"
-        ? `<span class="badge-small badge-declined">Not Paid</span>`
-        : alreadySent
-          ? `<span class="badge-small badge-nodetails">Details Sent</span>`
-          : `<span class="badge-small badge-nodetails">No Details</span>`;
+    let paymentBadge;
+    if (kind === "vip") {
+      paymentBadge = `<span class="badge-small badge-attending">Confirmed</span> <span class="vip-badge">VIP</span>`;
+    } else if (kind === "comp") {
+      paymentBadge = `<span class="badge-small badge-attending">Confirmed / Comp</span>`;
+    } else if (isPaid) {
+      paymentBadge = `<span class="badge-small badge-attending">Confirmed / Paid</span>`;
+    } else if (guest.paymentStatus === "unpaid" || kind === "unpaid") {
+      paymentBadge = `<span class="badge-small badge-declined">Not Paid</span>`;
+    } else if (alreadySent) {
+      paymentBadge = `<span class="badge-small badge-nodetails">Details Sent</span>`;
+    } else {
+      paymentBadge = `<span class="badge-small badge-nodetails">No Details</span>`;
+    }
 
     const sendBtnLabel = alreadySent ? "Resend Payment Details" : "Send Payment Details";
 
@@ -1012,13 +1026,19 @@ function updatePaidNamesPanel() {
   // Prefer expanded seat names from last stats payload when available
   if (window.__paidAttendees && window.__paidAttendees.length) {
     list.innerHTML = window.__paidAttendees
-      .map(a => "<li><strong>" + escapeHtml(a.name || "Guest") + "</strong> <small>(" + escapeHtml(a.guestId || "") +
-        (a.seatIndex ? " · seat " + a.seatIndex + "/" + (a.partySize || "") : "") +
-        (a.paymentKind === "comp" ? " · comp" : "") + ")</small></li>")
+      .map(a => {
+        const vip = a.isVip || a.paymentKind === "vip";
+        const kind = a.paymentKind === "comp" ? " · comp" : (vip ? "" : "");
+        const badge = vip ? ' <span class="vip-badge">VIP</span>' : "";
+        return "<li><strong>" + escapeHtml(a.name || "Guest") + "</strong>" + badge +
+          " <small>(" + escapeHtml(a.guestId || "") +
+          (a.seatIndex ? " · seat " + a.seatIndex + "/" + (a.partySize || "") : "") +
+          kind + ")</small></li>";
+      })
       .join("");
     return;
   }
-  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid" || g.paymentKind === "comp" || g.confirmed);
+  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid" || g.paymentKind === "comp" || g.paymentKind === "vip" || g.confirmed);
   if (!paid.length) {
     list.innerHTML = "<li>No guests marked paid yet.</li>";
     return;
