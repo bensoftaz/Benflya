@@ -277,6 +277,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <p><span class="who">Administrator</span></p>
     </div>
     <div class="header-actions">
+      <button id="admExport" class="small-btn" type="button">Export Confirmed</button>
       <button id="admRefresh" class="small-btn" type="button">Refresh</button>
       <button id="adminLogout" class="small-btn" type="button">Log Out</button>
     </div>
@@ -301,6 +302,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
     </div>
 
         <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
+        <button id="admExport2" type="button">Export Confirmed</button>
         <button id="admRefresh2" type="button">Refresh</button>
       </div>
       <div class="table-wrap">
@@ -639,6 +641,8 @@ async function initAdmin() {
   await loadGuestList();
   $("admRefresh").addEventListener("click", refreshAdmin);
   $("admRefresh2").addEventListener("click", refreshAdmin);
+  const exp1 = $("admExport"); if (exp1) exp1.addEventListener("click", exportConfirmedGuests);
+  const exp2 = $("admExport2"); if (exp2) exp2.addEventListener("click", exportConfirmedGuests);
   $("admSearch").addEventListener("input", renderTable);
   const paidBox = $("admPaidBox");
   if (paidBox) paidBox.addEventListener("click", togglePaidNamesPanel);
@@ -968,6 +972,32 @@ async function togglePaymentStatus(guestId, currentStatus, button) {
   }
 }
 
+
+
+async function exportConfirmedGuests() {
+  try {
+    showToast("Preparing export…");
+    const data = await apiGet("exportConfirmed");
+    if (!data || data.status !== "success" || !data.csv) {
+      throw new Error((data && data.message) || "Export failed.");
+    }
+    const filename = data.filename || ("confirmed-guests-" + new Date().toISOString().slice(0, 10) + ".csv");
+    const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const c = data.counts || {};
+    showToast("Exported " + (c.total || 0) + " seats (VIP " + (c.vip || 0) + ", Comp " + (c.comp || 0) + ", Paid " + (c.paid || 0) + ").");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Could not export.");
+  }
+}
 
 async function saveSeatAssignment(guestId, button) {
   const tableInput = document.querySelector(`[data-table-input="${CSS.escape(guestId)}"]`);
