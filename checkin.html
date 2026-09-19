@@ -540,8 +540,9 @@ function renderResult(data) {
     result.className = "ok";
     let party = data.partySize;
     if (party === undefined || party === null || party === "") party = data.plusOne ? 2 : 1;
-    let detail = `Party of ${escapeHtml(party)}`;
-    if (data.plusOneName) detail += ` · +1: ${escapeHtml(data.plusOneName)}`;
+    let detail = `${escapeHtml(party)} ${Number(party) === 1 ? "guest" : "guests"} in party`;
+    const p1 = String(data.plusOneName || "").trim();
+    if (p1 && !/^(n\/a|na|none|no|nil|-)$/i.test(p1)) detail += ` · includes ${escapeHtml(p1)}`;
     if (data.dietary) detail += ` · Dietary: ${escapeHtml(data.dietary)}`;
     result.innerHTML = `
       <div class="badge tick">✓</div>
@@ -741,9 +742,23 @@ function renderTable() {
     const tr = document.createElement("tr");
     const attending = guest.attending === "yes" || guest.attending === "true";
     const rsvpBadge = attending
-      ? `<span class="badge-small badge-attending">Attending</span>`
-      : `<span class="badge-small badge-declined">Declined</span>`;
-    const party = guest.partySize || (attending ? 1 : 0);
+      ? `<span class="badge-small badge-attending">Yes</span>`
+      : `<span class="badge-small badge-declined">No</span>`;
+    const party = Math.max(0, Number(guest.partySize) || (attending ? 1 : 0));
+    const plusRaw = String(guest.plusOneName || "").trim();
+    const plusOk = plusRaw && !/^(n\/a|na|none|no|nil|-)$/i.test(plusRaw);
+    let partyCell;
+    if (!attending) {
+      partyCell = `<span style="color:#75656a">—</span>`;
+    } else {
+      const guestWord = party === 1 ? "guest" : "guests";
+      partyCell = `<strong>${party}</strong> <small style="color:#75656a">${guestWord} total</small>`;
+      if (plusOk) {
+        partyCell += `<br><small style="color:#66565b">Includes: ${escapeHtml(plusRaw)}</small>`;
+      } else if (party > 1) {
+        partyCell += `<br><small style="color:#9a8a90">Extra names not listed</small>`;
+      }
+    }
     const checkin = guest.checkedIn
       ? `<span class="badge-small badge-attending">✓ Checked In</span>${guest.checkedInAt ? `<br><small>${escapeHtml(formatTime(guest.checkedInAt))}</small>` : ""}`
       : "—";
@@ -776,10 +791,7 @@ function renderTable() {
       </td>
       <td>${escapeHtml(guest.email || "—")}</td>
       <td>${rsvpBadge}</td>
-      <td>
-        ${escapeHtml(String(party))}
-        ${guest.plusOneName ? `<br><small>+1: ${escapeHtml(guest.plusOneName)}</small>` : ""}
-      </td>
+      <td>${partyCell}</td>
       <td>${checkin}</td>
       <td>
         ${attending && guest.email ? `
