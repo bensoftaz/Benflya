@@ -189,12 +189,26 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 .stat-box.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
 .stat-box.clickable:active { transform: scale(0.98); }
 .stat-box.clickable:hover { box-shadow: 0 0 0 2px var(--gold); }
+.paid-names-panel,
 #paidNamesPanel {
-  display: none; margin: 12px 0 18px; padding: 14px 16px; border-radius: 12px;
-  background: var(--cream); border: 1px solid var(--border); color: var(--ink);
+  display: none;
+  margin: 12px 0 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  color: var(--ink);
 }
-#paidNamesPanel.open { display: block; }
-#paidNamesPanel h3 { margin: 0 0 10px; font-size: 15px; color: var(--burgundy-900); }
+.paid-names-panel.open,
+#paidNamesPanel.open {
+  display: block;
+}
+#paidNamesPanel[hidden] { display: none !important; }
+.paid-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;
+}
+.paid-panel-head h3 { margin: 0; font-size: 15px; color: var(--burgundy-900); }
+.paid-panel-hint { margin: 0 0 10px; font-size: 13px; color: #75656a; }
 #paidNamesPanel ul { margin: 0; padding-left: 18px; }
 #paidNamesPanel li { margin: 4px 0; font-size: 14px; }
 .seat-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
@@ -289,18 +303,21 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <div class="stat-box"><div class="n" id="admDeclined">0</div><div class="l">Declined</div></div>
       <div class="stat-box"><div class="n" id="admGuests">0</div><div class="l">Total Guests</div></div>
       <div class="stat-box"><div class="n" id="admCheckedIn">0</div><div class="l">Checked In</div></div>
-      <div class="stat-box clickable" id="admPaidBox" title="Tap to show paid guest names"><div class="n" id="admPaid">0</div><div class="l">Confirmed (Paid) · tap</div></div>
+      <div class="stat-box clickable" id="admPaidBox" title="Tap to show or hide confirmed guest names"><div class="n" id="admPaid">0</div><div class="l">Confirmed (Paid) · tap</div></div>
+    </div>
+
+    <div id="paidNamesPanel" class="paid-names-panel" aria-live="polite" hidden>
+      <div class="paid-panel-head">
+        <h3>Confirmed guests <span id="paidPanelMeta"></span></h3>
+        <button type="button" class="small-btn" id="paidPanelClose">Hide</button>
+      </div>
+      <p class="paid-panel-hint">VIP, Comp, and Paid — shown only when you tap the counter above.</p>
+      <ul id="paidNamesList"></ul>
     </div>
 
     <section class="card">
       <h2>Guest List</h2>
       <div class="search-row">
-    <div id="paidNamesPanel" aria-live="polite">
-      <h3>Guests marked paid</h3>
-      <p style="margin:0 0 8px;font-size:13px;color:#75656a;">Only guests with payment status <b>paid</b>.</p>
-      <ul id="paidNamesList"></ul>
-    </div>
-
         <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
         <button id="admExport2" type="button">Export Confirmed</button>
         <button id="admRefresh2" type="button">Refresh</button>
@@ -647,6 +664,9 @@ async function initAdmin() {
   $("admSearch").addEventListener("input", renderTable);
   const paidBox = $("admPaidBox");
   if (paidBox) paidBox.addEventListener("click", togglePaidNamesPanel);
+  const paidClose = $("paidPanelClose");
+  if (paidClose) paidClose.addEventListener("click", closePaidNamesPanel);
+  closePaidNamesPanel();
 }
 
 async function refreshAdmin() {
@@ -1065,8 +1085,15 @@ async function deleteGuestRecord(guestId, button) {
 function updatePaidNamesPanel() {
   const list = $("paidNamesList");
   if (!list) return;
+  // Only needed when panel is open — keep list empty while hidden
+  if (!isPaidPanelOpen()) {
+    list.innerHTML = "";
+    return;
+  }
+  const meta = $("paidPanelMeta");
   // Prefer expanded seat names from last stats payload when available
   if (window.__paidAttendees && window.__paidAttendees.length) {
+    if (meta) meta.textContent = "(" + window.__paidAttendees.length + ")";
     list.innerHTML = window.__paidAttendees
       .map(a => {
         const vip = a.isVip || a.paymentKind === "vip";
@@ -1098,11 +1125,35 @@ function updatePaidNamesPanel() {
   list.innerHTML = rows.join("") || "<li>No guests marked paid yet.</li>";
 }
 
-function togglePaidNamesPanel() {
+function isPaidPanelOpen() {
+  const panel = $("paidNamesPanel");
+  return !!(panel && panel.classList.contains("open") && !panel.hasAttribute("hidden"));
+}
+
+function openPaidNamesPanel() {
   const panel = $("paidNamesPanel");
   if (!panel) return;
+  panel.removeAttribute("hidden");
+  panel.classList.add("open");
   updatePaidNamesPanel();
-  panel.classList.toggle("open");
+  const label = $("admPaidBox") && $("admPaidBox").querySelector(".l");
+  if (label) label.textContent = "Confirmed (Paid) · tap to hide";
+}
+
+function closePaidNamesPanel() {
+  const panel = $("paidNamesPanel");
+  if (!panel) return;
+  panel.classList.remove("open");
+  panel.setAttribute("hidden", "");
+  const list = $("paidNamesList");
+  if (list) list.innerHTML = "";
+  const label = $("admPaidBox") && $("admPaidBox").querySelector(".l");
+  if (label) label.textContent = "Confirmed (Paid) · tap";
+}
+
+function togglePaidNamesPanel() {
+  if (isPaidPanelOpen()) closePaidNamesPanel();
+  else openPaidNamesPanel();
 }
 
 boot();
