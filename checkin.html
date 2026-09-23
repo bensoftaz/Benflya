@@ -225,6 +225,9 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
   background: linear-gradient(135deg, #c9a24b, #e2c778); color: #2c0a15;
   font-size: 10px; font-weight: 900; letter-spacing: .06em; vertical-align: middle;
 }
+
+#admRsvpToggle.rsvp-on, #admRsvpToggle2.rsvp-on { background: #238636; color: #fff; border-color: #238636; }
+#admRsvpToggle.rsvp-off, #admRsvpToggle2.rsvp-off { background: #c62828; color: #fff; border-color: #c62828; }
 </style>
 </head>
 
@@ -291,6 +294,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <p><span class="who">Administrator</span></p>
     </div>
     <div class="header-actions">
+      <button id="admRsvpToggle" class="small-btn" type="button" title="Enable or disable the public RSVP form">RSVP: …</button>
       <button id="admExport" class="small-btn" type="button">Export Confirmed</button>
       <button id="admRefresh" class="small-btn" type="button">Refresh</button>
       <button id="adminLogout" class="small-btn" type="button">Log Out</button>
@@ -319,6 +323,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <h2>Guest List</h2>
       <div class="search-row">
         <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
+        <button id="admRsvpToggle2" type="button">RSVP: …</button>
         <button id="admExport2" type="button">Export Confirmed</button>
         <button id="admRefresh2" type="button">Refresh</button>
       </div>
@@ -661,6 +666,9 @@ async function initAdmin() {
   $("admRefresh2").addEventListener("click", refreshAdmin);
   const exp1 = $("admExport"); if (exp1) exp1.addEventListener("click", exportConfirmedGuests);
   const exp2 = $("admExport2"); if (exp2) exp2.addEventListener("click", exportConfirmedGuests);
+  const rsvpBtn = $("admRsvpToggle"); if (rsvpBtn) rsvpBtn.addEventListener("click", toggleRsvpForm);
+  const rsvpBtn2 = $("admRsvpToggle2"); if (rsvpBtn2) rsvpBtn2.addEventListener("click", toggleRsvpForm);
+  await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
   const paidBox = $("admPaidBox");
   if (paidBox) paidBox.addEventListener("click", togglePaidNamesPanel);
@@ -672,6 +680,7 @@ async function initAdmin() {
 async function refreshAdmin() {
   await loadStats();
   await loadGuestList();
+  await loadRsvpStatus();
   showToast("Guest database refreshed.");
 }
 
@@ -1005,6 +1014,51 @@ async function togglePaymentStatus(guestId, currentStatus, button) {
 }
 
 
+
+
+let rsvpFormOpen = false;
+
+function setRsvpToggleUi(open) {
+  rsvpFormOpen = !!open;
+  const label = open ? "RSVP: ON" : "RSVP: OFF";
+  ["admRsvpToggle", "admRsvpToggle2"].forEach(id => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.textContent = label;
+    btn.classList.toggle("rsvp-on", open);
+    btn.classList.toggle("rsvp-off", !open);
+  });
+}
+
+async function loadRsvpStatus() {
+  try {
+    const data = await apiGet("rsvpStatus");
+    if (data && data.status === "success") {
+      setRsvpToggleUi(!!data.open);
+    }
+  } catch (e) {
+    console.warn("rsvpStatus", e);
+  }
+}
+
+async function toggleRsvpForm() {
+  const next = !rsvpFormOpen;
+  const msg = next
+    ? "Enable the public RSVP form so new guests can submit?"
+    : "Disable the public RSVP form? New submissions will be blocked.";
+  if (!confirm(msg)) return;
+  try {
+    const data = await apiGet("setRsvpOpen", { open: next ? "1" : "0" });
+    if (!data || data.status !== "success") {
+      throw new Error((data && data.message) || "Could not update RSVP setting.");
+    }
+    setRsvpToggleUi(!!data.open);
+    showToast(data.message || (data.open ? "RSVP enabled." : "RSVP disabled."));
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || "Could not update RSVP.");
+  }
+}
 
 async function exportConfirmedGuests() {
   try {
