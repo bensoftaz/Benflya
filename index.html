@@ -382,7 +382,48 @@
 /* Local replaceable image system */
 .hero{position:relative;overflow:hidden}.hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.hero>*:not(.hero-img){position:relative;z-index:1}
 .story-photo,.venue-photo,.gallery-photo{display:block;width:100%;height:100%;object-fit:cover}.story-photo{aspect-ratio:1/1}.venue-photo{aspect-ratio:16/9}.gallery-photo{aspect-ratio:1/1}.gal-item{overflow:hidden}
-/* RSVP open / closed views (admin toggle) */
+
+  .status-link-btn{
+    background:none;border:none;padding:0;margin:0;cursor:pointer;font:inherit;
+    color:var(--gold-300);text-decoration:underline;font-size:inherit;
+  }
+  .status-lookup-panel{
+    display:none;max-width:420px;margin:28px auto 0;padding:22px 20px;
+    border:1px solid rgba(201,162,75,.45);background:rgba(44,10,21,.65);
+    text-align:left;color:var(--cream-50);
+  }
+  .status-lookup-panel.is-open{display:block}
+  .status-lookup-panel h3{
+    font-family:var(--serif);font-weight:500;font-size:1.35rem;color:var(--gold-300);
+    margin:0 0 8px;text-align:center;
+  }
+  .status-lookup-hint{color:var(--rose-300);font-size:14px;margin:0 0 16px;text-align:center;line-height:1.5}
+  .status-lookup-label{
+    display:block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--rose-400);margin-bottom:8px;
+  }
+  .status-lookup-row{display:flex;gap:10px;flex-wrap:wrap}
+  .status-lookup-row input{
+    flex:1;min-width:160px;min-height:48px;padding:12px 14px;border-radius:10px;
+    border:1px solid rgba(183,110,121,.35);background:#fff;color:var(--ink);font:inherit;font-size:16px;
+  }
+  .status-lookup-row .btn{padding:14px 22px;flex:none}
+  .status-lookup-result{
+    margin-top:16px;padding:14px;border-radius:10px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(201,162,75,.25);font-size:14px;line-height:1.55;display:none;
+  }
+  .status-lookup-result.show{display:block}
+  .status-lookup-result.err{border-color:rgba(198,40,40,.5);color:#ffc9c9}
+  .status-lookup-result .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+  .status-lookup-result .row:last-child{border-bottom:0}
+  .status-lookup-result .k{color:var(--rose-400);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .status-lookup-result .v{font-weight:600;text-align:right;color:var(--cream-50)}
+  .status-lookup-close{
+    display:block;margin:16px auto 0;background:none;border:0;color:var(--rose-400);
+    font-size:12px;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;text-decoration:underline;
+  }
+
+  /* RSVP open / closed views (admin toggle) */
   .rsvp-closed-view{display:none;padding:clamp(28px,6vw,56px) 0 12px;text-align:center}
   #rsvp.rsvp-is-closed .rsvp-closed-view{display:block}
   #rsvp.rsvp-is-closed .rsvp-open-view{display:none !important}
@@ -692,9 +733,10 @@
         <a class="btn btn-solid" data-wa target="_blank" rel="noopener" style="margin-top:8px">WhatsApp to RSVP ✦</a>
         <p style="margin-top:20px;font-size:14px;color:var(--rose-400)">
           Already registered?
-          <a href="https://benflya.online/guest-status.html" style="color:var(--gold-300);text-decoration:underline">Check your status</a>
+          <button type="button" id="openStatusLookup" class="status-link-btn">Check your status</button>
         </p>
       </header>
+
     </div>
 
     <!-- Shown only when RSVP is open / ON -->
@@ -733,6 +775,19 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
         </aside>
       </div>
     </div>
+
+          <div id="statusLookupPanel" class="status-lookup-panel" hidden>
+        <h3>Check your status</h3>
+        <p class="status-lookup-hint">Enter your Guest ID to see payment status and seat assignment.</p>
+        <label class="status-lookup-label" for="statusGuestId">Guest ID</label>
+        <div class="status-lookup-row">
+          <input id="statusGuestId" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="BP-XXXXXX">
+          <button type="button" id="statusLookupBtn" class="btn btn-solid">Check</button>
+        </div>
+        <div id="statusLookupResult" class="status-lookup-result" role="status" aria-live="polite"></div>
+        <button type="button" id="closeStatusLookup" class="status-lookup-close">Close</button>
+      </div>
+
   </div>
 </section>
 
@@ -867,6 +922,81 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   applyRsvpVisibility();
   setInterval(applyRsvpVisibility, 60000);
 
+  function escapeHtmlStatus(v){
+    return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function openStatusLookupPanel(){
+    var panel=$("#statusLookupPanel");
+    if(!panel) return;
+    panel.hidden=false;
+    panel.classList.add("is-open");
+    var input=$("#statusGuestId");
+    if(input){ input.focus(); }
+  }
+  function closeStatusLookupPanel(){
+    var panel=$("#statusLookupPanel");
+    if(!panel) return;
+    panel.classList.remove("is-open");
+    panel.hidden=true;
+    var res=$("#statusLookupResult");
+    if(res){ res.className="status-lookup-result"; res.innerHTML=""; }
+  }
+  async function runStatusLookup(){
+    var input=$("#statusGuestId");
+    var resEl=$("#statusLookupResult");
+    var btn=$("#statusLookupBtn");
+    if(!input||!resEl) return;
+    var id=String(input.value||"").trim();
+    if(!id){
+      resEl.className="status-lookup-result show err";
+      resEl.textContent="Please enter your Guest ID.";
+      return;
+    }
+    if(!CONFIG.RSVP_API_URL){
+      resEl.className="status-lookup-result show err";
+      resEl.textContent="Status service is not connected.";
+      return;
+    }
+    if(btn){ btn.disabled=true; btn.textContent="Checking…"; }
+    resEl.className="status-lookup-result";
+    resEl.innerHTML="";
+    try{
+      var res=await fetch(CONFIG.RSVP_API_URL+"?action=lookup&id="+encodeURIComponent(id),{method:"GET",cache:"no-store"});
+      var data=await res.json();
+      if(data.status==="not_found"||data.found===false){
+        resEl.className="status-lookup-result show err";
+        resEl.textContent=data.message||"No guest found with that Guest ID.";
+        return;
+      }
+      if(data.status!=="success"){
+        resEl.className="status-lookup-result show err";
+        resEl.textContent=data.message||"Could not look up this Guest ID.";
+        return;
+      }
+      var vip = data.paymentKind==="vip" ? ' <span style="color:var(--gold-300);font-weight:700">VIP</span>' : "";
+      resEl.className="status-lookup-result show";
+      resEl.innerHTML=
+        '<div class="row"><span class="k">Name</span><span class="v">'+escapeHtmlStatus(data.name||"—")+vip+'</span></div>'+
+        '<div class="row"><span class="k">Guest ID</span><span class="v">'+escapeHtmlStatus(data.guestId)+'</span></div>'+
+        '<div class="row"><span class="k">Payment</span><span class="v">'+escapeHtmlStatus(data.paymentLabel||"—")+'</span></div>'+
+        '<div class="row"><span class="k">Seat</span><span class="v">'+escapeHtmlStatus(data.seatLabel||"Not assigned")+'</span></div>';
+    }catch(err){
+      resEl.className="status-lookup-result show err";
+      resEl.textContent="Network error. Please try again.";
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent="Check"; }
+    }
+  }
+  var openStatusBtn=$("#openStatusLookup");
+  if(openStatusBtn) openStatusBtn.addEventListener("click", function(e){ e.preventDefault(); openStatusLookupPanel(); });
+  var closeStatusBtn=$("#closeStatusLookup");
+  if(closeStatusBtn) closeStatusBtn.addEventListener("click", closeStatusLookupPanel);
+  var statusBtn=$("#statusLookupBtn");
+  if(statusBtn) statusBtn.addEventListener("click", runStatusLookup);
+  var statusInput=$("#statusGuestId");
+  if(statusInput) statusInput.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); runStatusLookup(); } });
+
+
   if(rsvpForm){
     rsvpForm.addEventListener("submit", async function(e){
       e.preventDefault();
@@ -887,7 +1017,17 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
         }
         if(out.status==="duplicate"){
           rsvpStatus.innerHTML=(out.message||("We couldn't submit the RSVP. Please check if this is your <strong>"+(out.guestId||out.previousGuestId||"")+"</strong> or use WhatsApp.")) +
-            (out.guestId ? " <a href=\"https://benflya.online/guest-status.html\" style=\"color:var(--gold-300)\">Check status</a>" : "");
+            (out.guestId ? " <button type=\"button\" class=\"status-link-btn\" id=\"dupOpenStatus\">Check status</button>" : "");
+          var dupBtn=$("#dupOpenStatus");
+          if(dupBtn){
+            dupBtn.addEventListener("click", function(){
+              if(rsvpSection) rsvpSection.scrollIntoView({behavior:"smooth"});
+              // Ensure closed view path or still open lookup on open view - create panel if needed
+              openStatusLookupPanel();
+              var gi=$("#statusGuestId");
+              if(gi) gi.value=out.guestId||"";
+            });
+          }
           return;
         }
         if(out.status!=="success") throw new Error(out.message||"Unable to save RSVP");
@@ -1096,4 +1236,3 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 </script>
 </body>
 </html>
-
