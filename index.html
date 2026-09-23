@@ -700,6 +700,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
           <p id="rsvpStatus" class="rsvp-status" role="status" aria-live="polite"></p>
           <div id="rsvpQr" class="rsvp-qr" hidden></div>
         </form>
+        </div><!-- #rsvpFormWrap -->
       </div>
       <aside class="rsvp-aside">
         <div class="aside-block reveal"><h4>How it works</h4><p>Submit once → receive your unique QR code → show it at the entrance → usher scans it → your attendance is confirmed instantly.</p></div>
@@ -805,6 +806,38 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   $$('[data-wa]').forEach(function(a){ a.href=waURL(); });
 
   var rsvpForm=$("#rsvpForm"), rsvpStatus=$("#rsvpStatus"), rsvpQr=$("#rsvpQr");
+  var rsvpClosedBox=$("#rsvpClosedBox"), rsvpFormWrap=$("#rsvpFormWrap");
+
+  async function applyRsvpVisibility(){
+    if(!CONFIG.RSVP_API_URL) return;
+    try{
+      var res=await fetch(CONFIG.RSVP_API_URL+"?action=rsvpStatus",{method:"GET",cache:"no-store"});
+      var data=await res.json();
+      var open = !!(data && data.open === true);
+      if(rsvpFormWrap) rsvpFormWrap.classList.toggle("is-closed", !open);
+      if(rsvpForm){
+        rsvpForm.style.display = open ? "" : "none";
+        Array.prototype.forEach.call(rsvpForm.elements, function(el){ el.disabled = !open; });
+      }
+      if(rsvpClosedBox){
+        if(open) rsvpClosedBox.classList.remove("show");
+        else rsvpClosedBox.classList.add("show");
+      }
+      // Soft-hide nav RSVP emphasis when closed (link still goes to section with closed message)
+      $$(".nav-cta").forEach(function(a){
+        if((a.getAttribute("href")||"")==="#rsvp"){
+          a.style.opacity = open ? "" : "0.75";
+          a.title = open ? "RSVP" : "RSVP is currently closed";
+        }
+      });
+    }catch(err){
+      console.warn("rsvpStatus check failed", err);
+    }
+  }
+  applyRsvpVisibility();
+  // Re-check periodically in case admin toggles while page is open
+  setInterval(applyRsvpVisibility, 60000);
+
   if(rsvpForm){
     rsvpForm.addEventListener("submit", async function(e){
       e.preventDefault();
@@ -812,13 +845,25 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
       var fd=new FormData(rsvpForm), data={};
       fd.forEach(function(v,k){ data[k]=v; });
       data.partySize=Number(data.partySize||0);
+      data.action="rsvp";
       rsvpStatus.textContent="Submitting your RSVP…";
+      if(rsvpQr){ rsvpQr.hidden=true; rsvpQr.innerHTML=""; }
       try{
         var res=await fetch(CONFIG.RSVP_API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)});
         var out=await res.json();
+        if(out.status==="closed"){
+          rsvpStatus.textContent=out.message||"RSVP is currently closed.";
+          applyRsvpVisibility();
+          return;
+        }
+        if(out.status==="duplicate"){
+          rsvpStatus.innerHTML=(out.message||("We couldn't submit the RSVP. Please check if this is your <strong>"+(out.guestId||out.previousGuestId||"")+"</strong> or use WhatsApp.")) +
+            (out.guestId ? " <a href=\"https://benflya.online/guest-status.html\" style=\"color:var(--gold-300)\">Check status</a>" : "");
+          return;
+        }
         if(out.status!=="success") throw new Error(out.message||"Unable to save RSVP");
         rsvpStatus.innerHTML="✓ RSVP received. Your guest ID is <strong>"+out.guestId+"</strong>. Check your email for your QR pass.";
-        if(out.qrUrl){ rsvpQr.hidden=false; rsvpQr.innerHTML='<img src="'+out.qrUrl+'" alt="Your wedding QR code" style="width:220px;height:220px;object-fit:contain"><p>Save this QR code. A copy was also emailed to you.</p>'; }
+        if(out.qrUrl && rsvpQr){ rsvpQr.hidden=false; rsvpQr.innerHTML='<img src="'+out.qrUrl+'" alt="Your wedding QR code" style="width:220px;height:220px;object-fit:contain"><p>Save this QR code. A copy was also emailed to you.</p>'; }
         rsvpForm.reset();
       }catch(err){ rsvpStatus.textContent="We couldn't submit the RSVP. Please try again or use WhatsApp."; }
     });
@@ -1022,4 +1067,3 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 </script>
 </body>
 </html>
-
