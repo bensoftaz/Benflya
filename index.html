@@ -382,7 +382,13 @@
 /* Local replaceable image system */
 .hero{position:relative;overflow:hidden}.hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.hero>*:not(.hero-img){position:relative;z-index:1}
 .story-photo,.venue-photo,.gallery-photo{display:block;width:100%;height:100%;object-fit:cover}.story-photo{aspect-ratio:1/1}.venue-photo{aspect-ratio:16/9}.gallery-photo{aspect-ratio:1/1}.gal-item{overflow:hidden}
-/* Professional responsive RSVP form */
+/* RSVP open / closed views (admin toggle) */
+  .rsvp-closed-view{display:none;padding:clamp(28px,6vw,56px) 0 12px;text-align:center}
+  #rsvp.rsvp-is-closed .rsvp-closed-view{display:block}
+  #rsvp.rsvp-is-closed .rsvp-open-view{display:none !important}
+  .rsvp-closed-view .sec-title{color:var(--cream-50)}
+  .rsvp-closed-view .sec-sub{color:var(--rose-300)}
+  /* Professional responsive RSVP form */
 #rsvp form,#rsvp .rsvp-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;width:100%;box-sizing:border-box}
 #rsvp label{display:block;margin-bottom:7px;font-size:.76rem;letter-spacing:.08em;text-transform:uppercase}
 #rsvp input,#rsvp select,#rsvp textarea{width:100%;box-sizing:border-box;min-height:48px;border-radius:10px;border:1px solid rgba(183,110,121,.35);background:#fff;padding:12px 14px;font:inherit;outline:none}
@@ -674,39 +680,58 @@
 <!-- ================= RSVP (STRUCTURED + WHATSAPP REMINDER) ================= -->
 <section id="rsvp" class="on-dark">
   <div class="wrap">
-    <header class="sec-head" style="text-align:center">
-      <p class="sec-kicker reveal">Kindly Respond</p>
-      <h2 class="sec-title mask"><span class="mask-inner">Secure Your Seat  QAR 130</span></h2>
-      <p class="sec-sub reveal" style="--d:.15s">Please reply by <span data-bind="rsvpDeadline">September 19, 2026</span>. RSVP closes September 19, 2026
+    <!-- Shown only when RSVP is closed / OFF -->
+    <div id="rsvpClosedView" class="rsvp-closed-view" hidden>
+      <header class="sec-head" style="text-align:center">
+        <p class="sec-kicker">Kindly Respond</p>
+        <h2 class="sec-title">RSVP Closed</h2>
+        <p class="sec-sub" style="max-width:36ch;margin-inline:auto">Reach out via WhatsApp to RSVP.</p>
+        <div class="flourish" aria-hidden="true" style="justify-content:center;margin:22px auto">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.2 7.3L20 12l-6.8 2.7L12 22l-1.2-7.3L4 12l6.8-2.7z"/></svg>
+        </div>
+        <a class="btn btn-solid" data-wa target="_blank" rel="noopener" style="margin-top:8px">WhatsApp to RSVP ✦</a>
+        <p style="margin-top:20px;font-size:14px;color:var(--rose-400)">
+          Already registered?
+          <a href="https://benflya.online/guest-status.html" style="color:var(--gold-300);text-decoration:underline">Check your status</a>
+        </p>
+      </header>
+    </div>
+
+    <!-- Shown only when RSVP is open / ON -->
+    <div id="rsvpOpenView" class="rsvp-open-view">
+      <header class="sec-head" style="text-align:center">
+        <p class="sec-kicker reveal">Kindly Respond</p>
+        <h2 class="sec-title mask"><span class="mask-inner">Secure Your Seat  QAR 130</span></h2>
+        <p class="sec-sub reveal" style="--d:.15s">Please reply by <span data-bind="rsvpDeadline">September 19, 2026</span>. RSVP closes September 19, 2026
 Your RSVP includes your seat and reception meal, and creates your private wedding QR pass, your entry ticket on the day.</p>
-    </header>
-    <div class="rsvp-grid">
-      <div class="rsvp-card reveal">
-        <h3>Reserve your place ✦</h3>
-        <p>Complete the form below. If attending, you'll receive a unique QR code by email for fast entry on the wedding day.</p>
-        <form id="rsvpForm" class="rsvp-form">
-          <label>Full name<input required name="name" autocomplete="name" placeholder="Your full name"></label>
-          <label>Email address<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>
-          <label>Phone number<input required type="tel" name="phone" autocomplete="tel" placeholder="+974 XXXX XXXX"></label>
-          <label>Will you attend?
-            <select required name="attending"><option value="">Select</option><option value="yes">Yes — joyfully</option><option value="no">No — regretfully</option></select>
-          </label>
-          <label>Guests in your party<input required type="number" min="0" max="10" name="partySize" value="who else other than you"></label>
-          <label>Plus-one name (if applicable)<input name="plusOneName" placeholder="Optional"></label>
-          <label>Dietary needs / allergies<textarea name="dietary" rows="2" placeholder="Optional"></textarea></label>
-          <label>Message for the couple<textarea name="message" rows="3" placeholder="Optional"></textarea></label>
-          <button class="btn btn-solid" type="submit">Submit RSVP ✦</button>
-          <a class="btn btn-ghost" data-wa target="_blank" rel="noopener">RSVP the Couple</a>
-          <p id="rsvpStatus" class="rsvp-status" role="status" aria-live="polite"></p>
-          <div id="rsvpQr" class="rsvp-qr" hidden></div>
-        </form>
-        </div><!-- #rsvpFormWrap -->
+      </header>
+      <div class="rsvp-grid">
+        <div class="rsvp-card reveal">
+          <h3>Reserve your place ✦</h3>
+          <p>Complete the form below. If attending, you'll receive a unique QR code by email for fast entry on the wedding day.</p>
+          <form id="rsvpForm" class="rsvp-form">
+            <label>Full name<input required name="name" autocomplete="name" placeholder="Your full name"></label>
+            <label>Email address<input required type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>
+            <label>Phone number<input required type="tel" name="phone" autocomplete="tel" placeholder="+974 XXXX XXXX"></label>
+            <label>Will you attend?
+              <select required name="attending"><option value="">Select</option><option value="yes">Yes — joyfully</option><option value="no">No — regretfully</option></select>
+            </label>
+            <label>Guests in your party<input required type="number" min="0" max="10" name="partySize" value="0"></label>
+            <label>Plus-one name (if applicable)<input name="plusOneName" placeholder="Optional"></label>
+            <label>Dietary needs / allergies<textarea name="dietary" rows="2" placeholder="Optional"></textarea></label>
+            <label>Message for the couple<textarea name="message" rows="3" placeholder="Optional"></textarea></label>
+            <button class="btn btn-solid" type="submit">Submit RSVP ✦</button>
+            <a class="btn btn-ghost" data-wa target="_blank" rel="noopener">Message the Couple</a>
+            <p id="rsvpStatus" class="rsvp-status" role="status" aria-live="polite"></p>
+            <div id="rsvpQr" class="rsvp-qr" hidden></div>
+          </form>
+        </div>
+        <aside class="rsvp-aside">
+          <div class="aside-block reveal"><h4>How it works</h4><p>Submit once → receive your unique QR code → show it at the entrance → usher scans it → your attendance is confirmed instantly.</p></div>
+          <div class="aside-block reveal" style="--d:.1s"><h4>On the day</h4><p>Your QR code is linked to your name and party size. A second scan is automatically flagged to prevent duplicate entry.</p></div>
+          <div class="aside-block reveal" style="--d:.2s"><h4>Need help?</h4><p>You can still message Benson &amp; Precious on WhatsApp using the button in this form.</p></div>
+        </aside>
       </div>
-      <aside class="rsvp-aside">
-        <div class="aside-block reveal"><h4>How it works</h4><p>Submit once → receive your unique QR code → show it at the entrance → usher scans it → your attendance is confirmed instantly.</p></div>
-        <div class="aside-block reveal" style="--d:.1s"><h4>On the day</h4><p>Your QR code is linked to your name and party size. A second scan is automatically flagged to prevent duplicate entry.</p></div>
-        <div class="aside-block reveal" style="--d:.2s"><h4>Need help?</h4><p>You can still message Benson &amp; Precious on WhatsApp using the button in this form.</p></div>
-      </aside>
     </div>
   </div>
 </section>
@@ -806,7 +831,7 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
   $$('[data-wa]').forEach(function(a){ a.href=waURL(); });
 
   var rsvpForm=$("#rsvpForm"), rsvpStatus=$("#rsvpStatus"), rsvpQr=$("#rsvpQr");
-  var rsvpClosedBox=$("#rsvpClosedBox"), rsvpFormWrap=$("#rsvpFormWrap");
+  var rsvpSection=$("#rsvp"), rsvpOpenView=$("#rsvpOpenView"), rsvpClosedView=$("#rsvpClosedView");
 
   async function applyRsvpVisibility(){
     if(!CONFIG.RSVP_API_URL) return;
@@ -814,28 +839,32 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
       var res=await fetch(CONFIG.RSVP_API_URL+"?action=rsvpStatus",{method:"GET",cache:"no-store"});
       var data=await res.json();
       var open = !!(data && data.open === true);
-      if(rsvpFormWrap) rsvpFormWrap.classList.toggle("is-closed", !open);
+      if(rsvpSection) rsvpSection.classList.toggle("rsvp-is-closed", !open);
+      if(rsvpOpenView){
+        if(open){ rsvpOpenView.classList.remove("is-hidden"); rsvpOpenView.removeAttribute("hidden"); }
+        else { rsvpOpenView.classList.add("is-hidden"); rsvpOpenView.setAttribute("hidden",""); }
+      }
+      if(rsvpClosedView){
+        if(open){ rsvpClosedView.classList.remove("is-visible"); rsvpClosedView.setAttribute("hidden",""); }
+        else { rsvpClosedView.classList.add("is-visible"); rsvpClosedView.removeAttribute("hidden"); }
+      }
       if(rsvpForm){
-        rsvpForm.style.display = open ? "" : "none";
         Array.prototype.forEach.call(rsvpForm.elements, function(el){ el.disabled = !open; });
       }
-      if(rsvpClosedBox){
-        if(open) rsvpClosedBox.classList.remove("show");
-        else rsvpClosedBox.classList.add("show");
-      }
-      // Soft-hide nav RSVP emphasis when closed (link still goes to section with closed message)
       $$(".nav-cta").forEach(function(a){
         if((a.getAttribute("href")||"")==="#rsvp"){
-          a.style.opacity = open ? "" : "0.75";
-          a.title = open ? "RSVP" : "RSVP is currently closed";
+          a.textContent = open ? "RSVP" : "RSVP Closed";
+          a.title = open ? "RSVP" : "RSVP is closed — WhatsApp to respond";
+          a.style.opacity = open ? "" : "0.85";
         }
       });
+      // Re-bind WhatsApp links (including closed-view button)
+      $$("[data-wa]").forEach(function(a){ a.href=waURL(); });
     }catch(err){
       console.warn("rsvpStatus check failed", err);
     }
   }
   applyRsvpVisibility();
-  // Re-check periodically in case admin toggles while page is open
   setInterval(applyRsvpVisibility, 60000);
 
   if(rsvpForm){
@@ -1067,3 +1096,4 @@ Your RSVP includes your seat and reception meal, and creates your private weddin
 </script>
 </body>
 </html>
+
