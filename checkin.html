@@ -228,6 +228,28 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 
 #admRsvpToggle.rsvp-on, #admRsvpToggle2.rsvp-on { background: #238636; color: #fff; border-color: #238636; }
 #admRsvpToggle.rsvp-off, #admRsvpToggle2.rsvp-off { background: #c62828; color: #fff; border-color: #c62828; }
+
+.mgmt-panel { margin: 0 0 18px; }
+.mgmt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.mgmt-head h2 { margin: 0; font-size: 18px; color: var(--burgundy-900); }
+.mgmt-intro { margin: 0 0 16px; font-size: 13px; color: #75656a; }
+.mgmt-block { padding: 14px 0; border-top: 1px solid var(--border); }
+.mgmt-block h3 { margin: 0 0 6px; font-size: 15px; color: var(--burgundy-800); }
+.mgmt-hint { margin: 0 0 12px; font-size: 13px; color: #75656a; }
+.mgmt-export-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
+@media (min-width: 700px) {
+  .mgmt-export-grid { grid-template-columns: 1.4fr 1fr 1fr; }
+}
+.mgmt-export-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: #66565b; }
+.mgmt-export-grid select,
+.mgmt-export-grid input[type="date"] {
+  min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-weight: 500;
+}
+.mgmt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mgmt-soon { opacity: 0.85; }
+#mgmtPanel:not([hidden]) { display: block; }
+#admManageBtn.mgmt-open { box-shadow: 0 0 0 2px var(--gold); }
+
 </style>
 </head>
 
@@ -294,8 +316,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <p><span class="who">Administrator</span></p>
     </div>
     <div class="header-actions">
-      <button id="admRsvpToggle" class="small-btn" type="button" title="Enable or disable the public RSVP form">RSVP: …</button>
-      <button id="admExport" class="small-btn" type="button">Export Confirmed</button>
+      <button id="admManageBtn" class="small-btn" type="button">Management</button>
       <button id="admRefresh" class="small-btn" type="button">Refresh</button>
       <button id="adminLogout" class="small-btn" type="button">Log Out</button>
     </div>
@@ -319,12 +340,56 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <ul id="paidNamesList"></ul>
     </div>
 
+
+    <section id="mgmtPanel" class="card mgmt-panel" hidden>
+      <div class="mgmt-head">
+        <h2>Management</h2>
+        <button type="button" class="small-btn" id="mgmtCloseBtn">Close</button>
+      </div>
+      <p class="mgmt-intro">Admin tools for RSVP control and guest reports. Only visible after you open Management.</p>
+
+      <div class="mgmt-block">
+        <h3>1. RSVP settings</h3>
+        <p class="mgmt-hint">Enable or disable the public RSVP form on the website.</p>
+        <button type="button" id="admRsvpToggle" class="small-btn">RSVP: …</button>
+      </div>
+
+      <div class="mgmt-block">
+        <h3>2. Export reports</h3>
+        <p class="mgmt-hint">Download a CSV. Optional date range filters by RSVP submission date.</p>
+        <div class="mgmt-export-grid">
+          <label>Report type
+            <select id="mgmtExportType">
+              <option value="confirmed">Confirmed guests (paid / comp / vip…)</option>
+              <option value="comp">Complimentary (comp) only</option>
+              <option value="all">All guests</option>
+              <option value="children">Guests with children / infants</option>
+            </select>
+          </label>
+          <label>From date
+            <input type="date" id="mgmtFromDate">
+          </label>
+          <label>To date
+            <input type="date" id="mgmtToDate">
+          </label>
+        </div>
+        <div class="mgmt-actions">
+          <button type="button" id="mgmtExportBtn" class="payment-btn">Download CSV</button>
+        </div>
+        <p id="mgmtExportStatus" class="payment-status" style="margin-top:10px"></p>
+      </div>
+
+      <div class="mgmt-block mgmt-soon">
+        <h3>3. Share reports · 4. Email reminders</h3>
+        <p class="mgmt-hint">Coming next: email/WhatsApp share and bulk reminders by category.</p>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Guest List</h2>
       <div class="search-row">
         <input id="admSearch" type="search" placeholder="Search by name, email or guest ID" autocomplete="off">
-        <button id="admRsvpToggle2" type="button">RSVP: …</button>
-        <button id="admExport2" type="button">Export Confirmed</button>
+        <button id="admManageBtn2" type="button">Management</button>
         <button id="admRefresh2" type="button">Refresh</button>
       </div>
       <div class="table-wrap">
@@ -664,10 +729,12 @@ async function initAdmin() {
   await loadGuestList();
   $("admRefresh").addEventListener("click", refreshAdmin);
   $("admRefresh2").addEventListener("click", refreshAdmin);
-  const exp1 = $("admExport"); if (exp1) exp1.addEventListener("click", exportConfirmedGuests);
-  const exp2 = $("admExport2"); if (exp2) exp2.addEventListener("click", exportConfirmedGuests);
+  const manage1 = $("admManageBtn"); if (manage1) manage1.addEventListener("click", toggleMgmtPanel);
+  const manage2 = $("admManageBtn2"); if (manage2) manage2.addEventListener("click", toggleMgmtPanel);
+  const mgmtClose = $("mgmtCloseBtn"); if (mgmtClose) mgmtClose.addEventListener("click", closeMgmtPanel);
   const rsvpBtn = $("admRsvpToggle"); if (rsvpBtn) rsvpBtn.addEventListener("click", toggleRsvpForm);
-  const rsvpBtn2 = $("admRsvpToggle2"); if (rsvpBtn2) rsvpBtn2.addEventListener("click", toggleRsvpForm);
+  const expBtn = $("mgmtExportBtn"); if (expBtn) expBtn.addEventListener("click", runMgmtExport);
+  closeMgmtPanel();
   await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
   const paidBox = $("admPaidBox");
@@ -1021,13 +1088,12 @@ let rsvpFormOpen = false;
 function setRsvpToggleUi(open) {
   rsvpFormOpen = !!open;
   const label = open ? "RSVP: ON" : "RSVP: OFF";
-  ["admRsvpToggle", "admRsvpToggle2"].forEach(id => {
-    const btn = $(id);
-    if (!btn) return;
+  const btn = $("admRsvpToggle");
+  if (btn) {
     btn.textContent = label;
     btn.classList.toggle("rsvp-on", open);
     btn.classList.toggle("rsvp-off", !open);
-  });
+  }
 }
 
 async function loadRsvpStatus() {
@@ -1057,6 +1123,83 @@ async function toggleRsvpForm() {
   } catch (e) {
     console.error(e);
     showToast(e.message || "Could not update RSVP.");
+  }
+}
+
+
+function openMgmtPanel() {
+  const panel = $("mgmtPanel");
+  if (!panel) return;
+  panel.hidden = false;
+  const btn = $("admManageBtn");
+  if (btn) btn.classList.add("mgmt-open");
+  loadRsvpStatus();
+}
+
+function closeMgmtPanel() {
+  const panel = $("mgmtPanel");
+  if (!panel) return;
+  panel.hidden = true;
+  const btn = $("admManageBtn");
+  if (btn) btn.classList.remove("mgmt-open");
+}
+
+function toggleMgmtPanel() {
+  const panel = $("mgmtPanel");
+  if (!panel) return;
+  if (panel.hidden) openMgmtPanel();
+  else closeMgmtPanel();
+}
+
+async function runMgmtExport() {
+  const typeEl = $("mgmtExportType");
+  const fromEl = $("mgmtFromDate");
+  const toEl = $("mgmtToDate");
+  const status = $("mgmtExportStatus");
+  const btn = $("mgmtExportBtn");
+  const type = typeEl ? typeEl.value : "all";
+  const from = fromEl ? fromEl.value : "";
+  const to = toEl ? toEl.value : "";
+  if (status) {
+    status.textContent = "Preparing export…";
+    status.className = "payment-status sending";
+  }
+  if (btn) btn.disabled = true;
+  try {
+    let data;
+    if (type === "confirmed" && !from && !to) {
+      data = await apiGet("exportConfirmed");
+    } else {
+      data = await apiGet("exportGuests", { type: type, from: from, to: to });
+    }
+    if (!data || data.status !== "success" || !data.csv) {
+      throw new Error((data && data.message) || "Export failed.");
+    }
+    const filename = data.filename || ("guests-" + type + ".csv");
+    const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const n = data.count != null ? data.count : (data.counts && data.counts.total) || "—";
+    if (status) {
+      status.textContent = "✓ Downloaded (" + n + " rows).";
+      status.className = "payment-status success";
+    }
+    showToast("Report downloaded.");
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = "✕ " + (e.message || "Export failed");
+      status.className = "payment-status error";
+    }
+    showToast(e.message || "Export failed");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
