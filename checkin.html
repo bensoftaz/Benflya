@@ -250,6 +250,18 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 #mgmtPanel:not([hidden]) { display: block; }
 #admManageBtn.mgmt-open { box-shadow: 0 0 0 2px var(--gold); }
 
+
+.paid-breakdown { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.paid-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800;
+  background: #fff; border: 1px solid var(--border); color: var(--ink);
+}
+.paid-chip .n { color: var(--burgundy-800); font-size: 14px; }
+.paid-chip.kind-paid { border-color: #238636; }
+.paid-chip.kind-comp { border-color: #9a6700; }
+.paid-chip.kind-vip, .paid-chip.kind-vvip { border-color: var(--gold); background: #fff8e8; }
+.paid-chip.kind-pst, .paid-chip.kind-evm, .paid-chip.kind-bp { border-color: var(--burgundy-800); }
 </style>
 </head>
 
@@ -336,7 +348,8 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <h3>Confirmed guests <span id="paidPanelMeta"></span></h3>
         <button type="button" class="small-btn" id="paidPanelClose">Hide</button>
       </div>
-      <p class="paid-panel-hint">VIP, Comp, and Paid — shown only when you tap the counter above.</p>
+      <p class="paid-panel-hint">Breakdown and names — shown only when you tap Confirmed.</p>
+      <div id="paidBreakdown" class="paid-breakdown" aria-label="Confirmed breakdown"></div>
       <ul id="paidNamesList"></ul>
     </div>
 
@@ -760,6 +773,13 @@ async function loadStats() {
     $("admCheckedIn").textContent = Number(data.checkedIn || 0);
     $("admPaid").textContent = Number(data.paid || 0);
     window.__paidAttendees = Array.isArray(data.paidAttendees) ? data.paidAttendees : [];
+    window.__confirmedBreakdown = Array.isArray(data.breakdown) ? data.breakdown : [];
+    window.__statsPaid = {
+      total: Number(data.paid || 0),
+      paidOnly: Number(data.paidOnly || 0),
+      compOnly: Number(data.compOnly || 0),
+      vipOnly: Number(data.vipOnly || 0)
+    };
     updatePaidNamesPanel();
   } catch (error) {
     console.error("Admin stats error:", error);
@@ -1279,15 +1299,47 @@ async function deleteGuestRecord(guestId, button) {
   }
 }
 
+function renderPaidBreakdown() {
+  const box = $("paidBreakdown");
+  if (!box) return;
+  const items = Array.isArray(window.__confirmedBreakdown) ? window.__confirmedBreakdown : [];
+  if (!items.length) {
+    // Fallback from legacy stats fields
+    const s = window.__statsPaid || {};
+    const fallback = [];
+    if (s.paidOnly) fallback.push({ kind: "paid", label: "Paid", count: s.paidOnly });
+    if (s.compOnly) fallback.push({ kind: "comp", label: "Comp", count: s.compOnly });
+    if (s.vipOnly) fallback.push({ kind: "vip", label: "VIP", count: s.vipOnly });
+    if (!fallback.length) {
+      box.innerHTML = "<span class=\"paid-chip\">No confirmed breakdown yet</span>";
+      return;
+    }
+    box.innerHTML = fallback.map(function (it) {
+      return "<span class=\"paid-chip kind-" + escapeHtml(it.kind) + "\"><span class=\"n\">" +
+        escapeHtml(String(it.count)) + "</span> " + escapeHtml(it.label) + "</span>";
+    }).join("");
+    return;
+  }
+  box.innerHTML = items.map(function (it) {
+    const kind = String(it.kind || "").toLowerCase();
+    const label = it.label || String(it.kind || "").toUpperCase();
+    return "<span class=\"paid-chip kind-" + escapeHtml(kind) + "\"><span class=\"n\">" +
+      escapeHtml(String(it.count)) + "</span> " + escapeHtml(label) + "</span>";
+  }).join("");
+}
+
 function updatePaidNamesPanel() {
   const list = $("paidNamesList");
   if (!list) return;
   // Only needed when panel is open — keep list empty while hidden
   if (!isPaidPanelOpen()) {
     list.innerHTML = "";
+    const box = $("paidBreakdown");
+    if (box) box.innerHTML = "";
     return;
   }
   const meta = $("paidPanelMeta");
+  renderPaidBreakdown();
   // Prefer expanded seat names from last stats payload when available
   if (window.__paidAttendees && window.__paidAttendees.length) {
     if (meta) meta.textContent = "(" + window.__paidAttendees.length + ")";
