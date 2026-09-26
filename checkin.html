@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -262,6 +262,27 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
 .paid-chip.kind-comp { border-color: #9a6700; }
 .paid-chip.kind-vip, .paid-chip.kind-vvip { border-color: var(--gold); background: #fff8e8; }
 .paid-chip.kind-pst, .paid-chip.kind-evm, .paid-chip.kind-bp { border-color: var(--burgundy-800); }
+
+.mgmt-name-list { margin: 8px 0 0; padding-left: 18px; max-height: 280px; overflow: auto; }
+.mgmt-name-list li { margin: 4px 0; font-size: 14px; }
+.paid-chip { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.paid-chip:hover { transform: scale(1.03); }
+.paid-chip.active { box-shadow: 0 0 0 2px var(--burgundy-800); }
+.usher-tools { margin-top: 8px; }
+.usher-list-panel {
+  margin-top: 12px; padding: 14px; border-radius: 12px;
+  background: var(--cream); border: 1px solid var(--border); color: var(--ink); text-align: left;
+}
+.usher-list-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.usher-tab {
+  border: 1px solid var(--border); background: #fff; border-radius: 999px;
+  padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.usher-tab.active { background: var(--burgundy-800); color: #fff; border-color: var(--burgundy-800); }
+.usher-list-meta { margin: 0 0 8px; font-size: 13px; color: #75656a; }
+.usher-list-body { margin: 0; padding-left: 18px; max-height: 240px; overflow: auto; font-size: 14px; }
+.usher-list-body li { margin: 4px 0; }
+
 </style>
 </head>
 
@@ -318,6 +339,18 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <div class="counter-label">Guests Expected</div>
       </div>
     </div>
+    <div class="usher-tools">
+      <button type="button" id="usherListBtn" class="primary-btn" style="width:100%;margin-top:14px">Guest lists</button>
+      <div id="usherListPanel" class="usher-list-panel" hidden>
+        <div class="usher-list-tabs">
+          <button type="button" class="usher-tab active" data-usher-tab="pending">To check in</button>
+          <button type="button" class="usher-tab" data-usher-tab="paid">Confirmed / Paid</button>
+        </div>
+        <p id="usherListMeta" class="usher-list-meta"></p>
+        <ul id="usherListBody" class="usher-list-body"></ul>
+        <button type="button" id="usherListClose" class="small-btn" style="margin-top:10px">Close list</button>
+      </div>
+    </div>
   </main>
 </section>
 
@@ -340,18 +373,9 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       <div class="stat-box"><div class="n" id="admDeclined">0</div><div class="l">Declined</div></div>
       <div class="stat-box"><div class="n" id="admGuests">0</div><div class="l">Total Guests</div></div>
       <div class="stat-box"><div class="n" id="admCheckedIn">0</div><div class="l">Checked In</div></div>
-      <div class="stat-box clickable" id="admPaidBox" title="Tap to show or hide confirmed guest names"><div class="n" id="admPaid">0</div><div class="l">Confirmed (Paid) · tap</div></div>
+      <div class="stat-box" id="admPaidBox" title="Open Management for confirmed breakdown"><div class="n" id="admPaid">0</div><div class="l">Confirmed</div></div>
     </div>
 
-    <div id="paidNamesPanel" class="paid-names-panel" aria-live="polite" hidden>
-      <div class="paid-panel-head">
-        <h3>Confirmed guests <span id="paidPanelMeta"></span></h3>
-        <button type="button" class="small-btn" id="paidPanelClose">Hide</button>
-      </div>
-      <p class="paid-panel-hint">Breakdown and names — shown only when you tap Confirmed.</p>
-      <div id="paidBreakdown" class="paid-breakdown" aria-label="Confirmed breakdown"></div>
-      <ul id="paidNamesList"></ul>
-    </div>
 
 
     <section id="mgmtPanel" class="card mgmt-panel" hidden>
@@ -368,7 +392,15 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       </div>
 
       <div class="mgmt-block">
-        <h3>2. Export reports</h3>
+        <h3>2. Confirmed breakdown</h3>
+        <p class="mgmt-hint">Tap a category (Paid, Comp, VIP…) to list only those guests. Tap again to clear the filter.</p>
+        <div id="paidBreakdown" class="paid-breakdown" aria-label="Confirmed breakdown"></div>
+        <p id="paidFilterLabel" class="mgmt-hint" style="margin-top:8px"></p>
+        <ul id="paidNamesList" class="mgmt-name-list"></ul>
+      </div>
+
+      <div class="mgmt-block">
+        <h3>3. Export reports</h3>
         <p class="mgmt-hint">Download a CSV. Optional date range filters by RSVP submission date.</p>
         <div class="mgmt-export-grid">
           <label>Report type
@@ -393,7 +425,7 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
       </div>
 
       <div class="mgmt-block mgmt-soon">
-        <h3>3. Share reports · 4. Email reminders</h3>
+        <h3>4. Share reports · 5. Email reminders</h3>
         <p class="mgmt-hint">Coming next: email/WhatsApp share and bulk reminders by category.</p>
       </div>
     </section>
@@ -717,6 +749,7 @@ async function refreshCounter() {
 }
 
 setInterval(refreshCounter, 15000);
+initUsherTools();
 
 $("manualBtn").addEventListener("click", () => {
   const value = $("manualId").value.trim();
@@ -750,11 +783,9 @@ async function initAdmin() {
   closeMgmtPanel();
   await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
-  const paidBox = $("admPaidBox");
-  if (paidBox) paidBox.addEventListener("click", togglePaidNamesPanel);
-  const paidClose = $("paidPanelClose");
-  if (paidClose) paidClose.addEventListener("click", closePaidNamesPanel);
-  closePaidNamesPanel();
+  // Confirmed breakdown lives under Management (not primary stats)
+  window.__paidFilterKind = "";
+
 }
 
 async function refreshAdmin() {
@@ -1154,6 +1185,8 @@ function openMgmtPanel() {
   const btn = $("admManageBtn");
   if (btn) btn.classList.add("mgmt-open");
   loadRsvpStatus();
+  window.__paidFilterKind = window.__paidFilterKind || "";
+  updatePaidNamesPanel();
 }
 
 function closeMgmtPanel() {
@@ -1299,111 +1332,165 @@ async function deleteGuestRecord(guestId, button) {
   }
 }
 
+
 function renderPaidBreakdown() {
   const box = $("paidBreakdown");
   if (!box) return;
-  const items = Array.isArray(window.__confirmedBreakdown) ? window.__confirmedBreakdown : [];
+  const items = Array.isArray(window.__confirmedBreakdown) ? window.__confirmedBreakdown.slice() : [];
   if (!items.length) {
-    // Fallback from legacy stats fields
     const s = window.__statsPaid || {};
-    const fallback = [];
-    if (s.paidOnly) fallback.push({ kind: "paid", label: "Paid", count: s.paidOnly });
-    if (s.compOnly) fallback.push({ kind: "comp", label: "Comp", count: s.compOnly });
-    if (s.vipOnly) fallback.push({ kind: "vip", label: "VIP", count: s.vipOnly });
-    if (!fallback.length) {
-      box.innerHTML = "<span class=\"paid-chip\">No confirmed breakdown yet</span>";
-      return;
-    }
-    box.innerHTML = fallback.map(function (it) {
-      return "<span class=\"paid-chip kind-" + escapeHtml(it.kind) + "\"><span class=\"n\">" +
-        escapeHtml(String(it.count)) + "</span> " + escapeHtml(it.label) + "</span>";
-    }).join("");
+    if (s.paidOnly) items.push({ kind: "paid", label: "Paid", count: s.paidOnly });
+    if (s.compOnly) items.push({ kind: "comp", label: "Comp", count: s.compOnly });
+    if (s.vipOnly) items.push({ kind: "vip", label: "VIP", count: s.vipOnly });
+  }
+  if (!items.length) {
+    box.innerHTML = "<span class=\"paid-chip\">No confirmed guests yet</span>";
     return;
   }
+  const active = String(window.__paidFilterKind || "").toLowerCase();
   box.innerHTML = items.map(function (it) {
     const kind = String(it.kind || "").toLowerCase();
     const label = it.label || String(it.kind || "").toUpperCase();
-    return "<span class=\"paid-chip kind-" + escapeHtml(kind) + "\"><span class=\"n\">" +
-      escapeHtml(String(it.count)) + "</span> " + escapeHtml(label) + "</span>";
+    const isActive = active && active === kind;
+    return "<button type=\"button\" class=\"paid-chip kind-" + escapeHtml(kind) + (isActive ? " active" : "") +
+      "\" data-filter-kind=\"" + escapeHtml(kind) + "\"><span class=\"n\">" +
+      escapeHtml(String(it.count)) + "</span> " + escapeHtml(label) + "</button>";
   }).join("");
+  box.querySelectorAll("[data-filter-kind]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const kind = btn.getAttribute("data-filter-kind") || "";
+      if (window.__paidFilterKind === kind) window.__paidFilterKind = "";
+      else window.__paidFilterKind = kind;
+      updatePaidNamesPanel();
+    });
+  });
 }
 
 function updatePaidNamesPanel() {
   const list = $("paidNamesList");
+  const label = $("paidFilterLabel");
   if (!list) return;
-  // Only needed when panel is open — keep list empty while hidden
-  if (!isPaidPanelOpen()) {
-    list.innerHTML = "";
-    const box = $("paidBreakdown");
-    if (box) box.innerHTML = "";
-    return;
-  }
-  const meta = $("paidPanelMeta");
   renderPaidBreakdown();
-  // Prefer expanded seat names from last stats payload when available
-  if (window.__paidAttendees && window.__paidAttendees.length) {
-    if (meta) meta.textContent = "(" + window.__paidAttendees.length + ")";
-    list.innerHTML = window.__paidAttendees
-      .map(a => {
-        const vip = a.isVip || a.paymentKind === "vip";
-        const kind = a.paymentKind === "comp" ? " · comp" : (vip ? "" : "");
-        const badge = vip ? ' <span class="vip-badge">VIP</span>' : "";
-        return "<li><strong>" + escapeHtml(a.name || "Guest") + "</strong>" + badge +
-          " <small>(" + escapeHtml(a.guestId || "") +
-          (a.seatIndex ? " · seat " + a.seatIndex + "/" + (a.partySize || "") : "") +
-          kind + ")</small></li>";
-      })
-      .join("");
+  const filter = String(window.__paidFilterKind || "").toLowerCase();
+  const all = Array.isArray(window.__paidAttendees) ? window.__paidAttendees : [];
+  if (!filter) {
+    list.innerHTML = "";
+    if (label) label.textContent = "Select a category above to list those guests only.";
     return;
   }
-  const paid = allGuests.map(normalizeGuest).filter(g => g.paymentStatus === "paid" || g.paymentKind === "comp" || g.paymentKind === "vip" || g.confirmed);
-  if (!paid.length) {
-    list.innerHTML = "<li>No guests marked paid yet.</li>";
-    return;
-  }
-  const rows = [];
-  paid.forEach(g => {
-    const names = Array.isArray(g.partyNames) && g.partyNames.length
-      ? g.partyNames
-      : [g.name || "Guest"];
-    names.forEach((nm, idx) => {
-      rows.push("<li><strong>" + escapeHtml(nm) + "</strong> <small>(" + escapeHtml(g.guestId) +
-        " · seat " + (idx + 1) + "/" + names.length + ")</small></li>");
-    });
+  const rows = all.filter(function (a) {
+    return String(a.paymentKind || "").toLowerCase() === filter;
   });
-  list.innerHTML = rows.join("") || "<li>No guests marked paid yet.</li>";
+  if (label) {
+    label.textContent = rows.length
+      ? ("Showing " + rows.length + " · " + filter.toUpperCase())
+      : ("No guests for " + filter.toUpperCase());
+  }
+  if (!rows.length) {
+    list.innerHTML = "<li>No guests in this category.</li>";
+    return;
+  }
+  list.innerHTML = rows.map(function (a) {
+    const vip = a.isVip || a.paymentKind === "vip" || a.paymentKind === "vvip";
+    const badge = vip ? " <span class=\"vip-badge\">VIP</span>" : "";
+    return "<li><strong>" + escapeHtml(a.name || "Guest") + "</strong>" + badge +
+      " <small>(" + escapeHtml(a.guestId || "") +
+      (a.seatIndex ? " · seat " + a.seatIndex + "/" + (a.partySize || "") : "") +
+      ")</small></li>";
+  }).join("");
 }
 
 function isPaidPanelOpen() {
-  const panel = $("paidNamesPanel");
-  return !!(panel && panel.classList.contains("open") && !panel.hasAttribute("hidden"));
+  // Confirmed list now lives inside Management panel
+  const mgmt = $("mgmtPanel");
+  return !!(mgmt && !mgmt.hidden);
 }
 
-function openPaidNamesPanel() {
-  const panel = $("paidNamesPanel");
+
+
+
+let usherTab = "pending";
+let usherGuestsCache = [];
+
+async function loadUsherGuestLists() {
+  try {
+    const data = await apiGet("list");
+    let rows = [];
+    if (Array.isArray(data)) rows = data;
+    else if (Array.isArray(data.guests)) rows = data.guests;
+    else if (Array.isArray(data.responses)) rows = data.responses;
+    else if (Array.isArray(data.data)) rows = data.data;
+    usherGuestsCache = rows.map(normalizeGuest);
+  } catch (e) {
+    console.warn(e);
+    usherGuestsCache = [];
+  }
+}
+
+function renderUsherList() {
+  const body = $("usherListBody");
+  const meta = $("usherListMeta");
+  if (!body) return;
+  const guests = usherGuestsCache.filter(function (g) {
+    return String(g.attending || "").toLowerCase() === "yes";
+  });
+  let list = [];
+  if (usherTab === "paid") {
+    list = guests.filter(function (g) {
+      return g.confirmed || g.paymentStatus === "paid" ||
+        ["paid", "comp", "vip", "vvip", "pst", "evm", "bp"].indexOf(String(g.paymentKind || "").toLowerCase()) >= 0;
+    });
+    if (meta) meta.textContent = list.length + " confirmed guest(s) · party headcount may be higher";
+  } else {
+    list = guests.filter(function (g) { return !g.checkedIn; });
+    if (meta) meta.textContent = list.length + " still to check in (attending, not scanned)";
+  }
+  list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  if (!list.length) {
+    body.innerHTML = "<li>No guests in this list.</li>";
+    return;
+  }
+  body.innerHTML = list.map(function (g) {
+    const party = g.partySize ? (" · party " + g.partySize) : "";
+    const pay = g.paymentKind ? (" · " + String(g.paymentKind).toUpperCase()) : "";
+    return "<li><strong>" + escapeHtml(g.name || "Guest") + "</strong> <small>" +
+      escapeHtml(g.guestId || "") + party + pay + "</small></li>";
+  }).join("");
+}
+
+async function openUsherListPanel() {
+  const panel = $("usherListPanel");
   if (!panel) return;
-  panel.removeAttribute("hidden");
-  panel.classList.add("open");
-  updatePaidNamesPanel();
-  const label = $("admPaidBox") && $("admPaidBox").querySelector(".l");
-  if (label) label.textContent = "Confirmed (Paid) · tap to hide";
+  panel.hidden = false;
+  await loadUsherGuestLists();
+  renderUsherList();
 }
 
-function closePaidNamesPanel() {
-  const panel = $("paidNamesPanel");
-  if (!panel) return;
-  panel.classList.remove("open");
-  panel.setAttribute("hidden", "");
-  const list = $("paidNamesList");
-  if (list) list.innerHTML = "";
-  const label = $("admPaidBox") && $("admPaidBox").querySelector(".l");
-  if (label) label.textContent = "Confirmed (Paid) · tap";
+function closeUsherListPanel() {
+  const panel = $("usherListPanel");
+  if (panel) panel.hidden = true;
 }
 
-function togglePaidNamesPanel() {
-  if (isPaidPanelOpen()) closePaidNamesPanel();
-  else openPaidNamesPanel();
+function initUsherTools() {
+  const btn = $("usherListBtn");
+  if (btn) btn.addEventListener("click", function () {
+    const panel = $("usherListPanel");
+    if (panel && !panel.hidden) closeUsherListPanel();
+    else openUsherListPanel();
+  });
+  const closeBtn = $("usherListClose");
+  if (closeBtn) closeBtn.addEventListener("click", closeUsherListPanel);
+  document.querySelectorAll("[data-usher-tab]").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      usherTab = tab.getAttribute("data-usher-tab") || "pending";
+      document.querySelectorAll("[data-usher-tab]").forEach(function (x) {
+        x.classList.toggle("active", x === tab);
+      });
+      renderUsherList();
+    });
+  });
 }
+
 
 boot();
 
