@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -424,8 +424,21 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <p id="mgmtExportStatus" class="payment-status" style="margin-top:10px"></p>
       </div>
 
+
+      <div class="mgmt-block">
+        <h3>4. Guest confirmation email</h3>
+        <p class="mgmt-hint">Resend QR code and seat details to one guest, even if already sent. Includes a benflya status link.</p>
+        <div class="mgmt-export-grid" style="grid-template-columns:1fr auto;align-items:end;">
+          <label>Guest ID
+            <input type="text" id="mgmtConfirmGuestId" placeholder="BP-XXXXXX" autocomplete="off" autocapitalize="characters">
+          </label>
+          <button type="button" id="mgmtConfirmBtn" class="payment-btn">CONFIRMATION</button>
+        </div>
+        <p id="mgmtConfirmStatus" class="payment-status" style="margin-top:10px"></p>
+      </div>
+
       <div class="mgmt-block mgmt-soon">
-        <h3>4. Share reports · 5. Email reminders</h3>
+        <h3>5. Share reports · 6. Email reminders</h3>
         <p class="mgmt-hint">Coming next: email/WhatsApp share and bulk reminders by category.</p>
       </div>
     </section>
@@ -780,6 +793,7 @@ async function initAdmin() {
   const mgmtClose = $("mgmtCloseBtn"); if (mgmtClose) mgmtClose.addEventListener("click", closeMgmtPanel);
   const rsvpBtn = $("admRsvpToggle"); if (rsvpBtn) rsvpBtn.addEventListener("click", toggleRsvpForm);
   const expBtn = $("mgmtExportBtn"); if (expBtn) expBtn.addEventListener("click", runMgmtExport);
+  const confBtn = $("mgmtConfirmBtn"); if (confBtn) confBtn.addEventListener("click", runMgmtConfirmation);
   closeMgmtPanel();
   await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
@@ -1202,6 +1216,47 @@ function toggleMgmtPanel() {
   if (!panel) return;
   if (panel.hidden) openMgmtPanel();
   else closeMgmtPanel();
+}
+
+
+async function runMgmtConfirmation() {
+  const input = $("mgmtConfirmGuestId");
+  const status = $("mgmtConfirmStatus");
+  const btn = $("mgmtConfirmBtn");
+  const id = input ? String(input.value || "").trim() : "";
+  if (!id) {
+    if (status) {
+      status.textContent = "Enter a Guest ID first.";
+      status.className = "payment-status error";
+    }
+    return;
+  }
+  if (!confirm("Send confirmation email (QR + seat + benflya) to " + id + "?\n\nThis will send even if details were sent before.")) return;
+  if (status) {
+    status.textContent = "Sending confirmation…";
+    status.className = "payment-status sending";
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const data = await apiGet("sendConfirmation", { id: id });
+    if (!data || data.status !== "success") {
+      throw new Error((data && data.message) || "Could not send confirmation.");
+    }
+    if (status) {
+      status.textContent = "✓ " + (data.message || "Sent") + (data.email ? " → " + data.email : "");
+      status.className = "payment-status success";
+    }
+    showToast("Confirmation sent to " + (data.email || id));
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = "✕ " + (e.message || "Send failed");
+      status.className = "payment-status error";
+    }
+    showToast(e.message || "Send failed");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function runMgmtExport() {
