@@ -437,8 +437,19 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <p id="mgmtConfirmStatus" class="payment-status" style="margin-top:10px"></p>
       </div>
 
+
+      <div class="mgmt-block">
+        <h3>5. Close RSVP notice (unpaid guests)</h3>
+        <p class="mgmt-hint">Emails every guest who is <b>not confirmed</b> (not paid / comp / vip…). One email each. Already-notified guests are skipped.</p>
+        <div class="mgmt-actions">
+          <button type="button" id="mgmtClosureCountBtn" class="small-btn">Count audience</button>
+          <button type="button" id="mgmtClosureSendBtn" class="payment-btn">SEND TO ALL UNPAID</button>
+        </div>
+        <p id="mgmtClosureStatus" class="payment-status" style="margin-top:10px"></p>
+      </div>
+
       <div class="mgmt-block mgmt-soon">
-        <h3>5. Share reports · 6. Email reminders</h3>
+        <h3>6. Share reports · 7. Email reminders</h3>
         <p class="mgmt-hint">Coming next: email/WhatsApp share and bulk reminders by category.</p>
       </div>
     </section>
@@ -794,6 +805,8 @@ async function initAdmin() {
   const rsvpBtn = $("admRsvpToggle"); if (rsvpBtn) rsvpBtn.addEventListener("click", toggleRsvpForm);
   const expBtn = $("mgmtExportBtn"); if (expBtn) expBtn.addEventListener("click", runMgmtExport);
   const confBtn = $("mgmtConfirmBtn"); if (confBtn) confBtn.addEventListener("click", runMgmtConfirmation);
+  const closureCount = $("mgmtClosureCountBtn"); if (closureCount) closureCount.addEventListener("click", runMgmtClosureCount);
+  const closureSend = $("mgmtClosureSendBtn"); if (closureSend) closureSend.addEventListener("click", runMgmtClosureSend);
   closeMgmtPanel();
   await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
@@ -1218,6 +1231,62 @@ function toggleMgmtPanel() {
   else closeMgmtPanel();
 }
 
+
+
+async function runMgmtClosureCount() {
+  const status = $("mgmtClosureStatus");
+  if (status) {
+    status.textContent = "Counting unpaid guests…";
+    status.className = "payment-status sending";
+  }
+  try {
+    const data = await apiGet("countClosureAudience");
+    if (!data || data.status !== "success") throw new Error((data && data.message) || "Count failed");
+    if (status) {
+      status.textContent = "Eligible: " + data.eligible + " · Already sent: " + (data.alreadySent || 0) + " · No email: " + (data.noEmail || 0);
+      status.className = "payment-status success";
+    }
+  } catch (e) {
+    if (status) {
+      status.textContent = "✕ " + (e.message || "Count failed");
+      status.className = "payment-status error";
+    }
+  }
+}
+
+async function runMgmtClosureSend() {
+  const status = $("mgmtClosureStatus");
+  const btn = $("mgmtClosureSendBtn");
+  let eligible = "?";
+  try {
+    const pre = await apiGet("countClosureAudience");
+    if (pre && pre.status === "success") eligible = pre.eligible;
+  } catch (e0) {}
+  if (!confirm("Send the RSVP closed notice to " + eligible + " unpaid guest(s)?\n\nEach person gets their own email. Guests already notified are skipped.")) return;
+  if (status) {
+    status.textContent = "Sending… this may take a minute.";
+    status.className = "payment-status sending";
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const data = await apiGet("sendClosureNotices");
+    if (!data || data.status !== "success") throw new Error((data && data.message) || "Send failed");
+    if (status) {
+      status.textContent = "✓ " + (data.message || ("Sent " + data.sent));
+      status.className = "payment-status success";
+    }
+    showToast(data.message || "Closure notices sent");
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = "✕ " + (e.message || "Send failed");
+      status.className = "payment-status error";
+    }
+    showToast(e.message || "Send failed");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 async function runMgmtConfirmation() {
   const input = $("mgmtConfirmGuestId");
