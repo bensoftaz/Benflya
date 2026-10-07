@@ -448,8 +448,22 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <p id="mgmtClosureStatus" class="payment-status" style="margin-top:10px"></p>
       </div>
 
+
+      <div class="mgmt-block">
+        <h3>6. Seat allocation</h3>
+        <p class="mgmt-hint">
+          <b>VIP</b> → Table VIP 1 (no email) · <b>EVM</b> → Table VIP 2 (no email).<br>
+          Skips Paid / Comp / VVIP / PST / B&amp;P and anyone who already has a table.<br>
+          Others (attending, no code) → Table <b>5-10</b> + email with QR and party size.
+        </p>
+        <div class="mgmt-actions">
+          <button type="button" id="mgmtSeatAllocBtn" class="payment-btn">RUN SEAT ALLOCATION</button>
+        </div>
+        <p id="mgmtSeatAllocStatus" class="payment-status" style="margin-top:10px"></p>
+      </div>
+
       <div class="mgmt-block mgmt-soon">
-        <h3>6. Share reports · 7. Email reminders</h3>
+        <h3>7. Share reports · 8. Email reminders</h3>
         <p class="mgmt-hint">Coming next: email/WhatsApp share and bulk reminders by category.</p>
       </div>
     </section>
@@ -807,6 +821,7 @@ async function initAdmin() {
   const confBtn = $("mgmtConfirmBtn"); if (confBtn) confBtn.addEventListener("click", runMgmtConfirmation);
   const closureCount = $("mgmtClosureCountBtn"); if (closureCount) closureCount.addEventListener("click", runMgmtClosureCount);
   const closureSend = $("mgmtClosureSendBtn"); if (closureSend) closureSend.addEventListener("click", runMgmtClosureSend);
+  const seatAlloc = $("mgmtSeatAllocBtn"); if (seatAlloc) seatAlloc.addEventListener("click", runMgmtSeatAllocation);
   closeMgmtPanel();
   await loadRsvpStatus();
   $("admSearch").addEventListener("input", renderTable);
@@ -1232,6 +1247,38 @@ function toggleMgmtPanel() {
 }
 
 
+
+
+async function runMgmtSeatAllocation() {
+  const status = $("mgmtSeatAllocStatus");
+  const btn = $("mgmtSeatAllocBtn");
+  if (!confirm("Run seat allocation?\n\n• VIP → VIP 1 (no email)\n• EVM → VIP 2 (no email)\n• Open seating → Table 5-10 + QR email\n• Skips Paid/Comp/VVIP/PST/B&P and existing tables")) return;
+  if (status) {
+    status.textContent = "Running seat allocation…";
+    status.className = "payment-status sending";
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const data = await apiGet("runSeatAllocation");
+    if (!data || data.status !== "success") throw new Error((data && data.message) || "Allocation failed");
+    if (status) {
+      status.textContent = "✓ " + (data.message || "Done");
+      status.className = "payment-status success";
+    }
+    showToast(data.message || "Seat allocation complete");
+    loadStats();
+    loadGuestList();
+  } catch (e) {
+    console.error(e);
+    if (status) {
+      status.textContent = "✕ " + (e.message || "Failed");
+      status.className = "payment-status error";
+    }
+    showToast(e.message || "Seat allocation failed");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 async function runMgmtClosureCount() {
   const status = $("mgmtClosureStatus");
