@@ -454,7 +454,8 @@ th { background: #f8f1f3; color: var(--burgundy-800); font-size: 11px; text-tran
         <p class="mgmt-hint">
           <b>VIP</b> → Table VIP 1 (no email) · <b>EVM</b> → Table VIP 2 (no email).<br>
           Skips Paid / Comp / VVIP / PST / B&amp;P and anyone who already has a table.<br>
-          Others (attending, no code) → Table <b>5-10</b> + email with QR and party size.
+          <b>Confirmed (paid/comp/…)</b> → Table 5-10 + seating email with QR.<br>
+          <b>Unpaid</b> → RSVP closed email. If they got seating mail by mistake → auto “please ignore” email.
         </p>
         <div class="mgmt-actions">
           <button type="button" id="mgmtSeatAllocBtn" class="payment-btn">RUN SEAT ALLOCATION</button>
@@ -1252,7 +1253,7 @@ function toggleMgmtPanel() {
 async function runMgmtSeatAllocation() {
   const status = $("mgmtSeatAllocStatus");
   const btn = $("mgmtSeatAllocBtn");
-  if (!confirm("Run seat allocation?\n\n• VIP → VIP 1 (no email)\n• EVM → VIP 2 (no email)\n• Open seating → Table 5-10 + QR email\n• Skips Paid/Comp/VVIP/PST/B&P and existing tables")) return;
+  if (!confirm("Run seat allocation?\n\n• VIP → VIP 1 (no email)\n• EVM → VIP 2 (no email)\n• Confirmed → Table 5-10 + seating email\n• Unpaid → closed notice / ignore previous if needed")) return;
   if (status) {
     status.textContent = "Running seat allocation…";
     status.className = "payment-status sending";
